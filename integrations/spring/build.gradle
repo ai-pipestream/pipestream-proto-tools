@@ -1,0 +1,10 @@
+description = 'Spring integration for Pipestream protobuf tools'
+
+dependencies {
+    api project(':pipestream-proto-tools-mapper-cel')
+    api project(':pipestream-proto-tools-rest')
+    compileOnly libs.spring.context
+
+    testImplementation libs.spring.context
+    testImplementation libs.spring.test
+}

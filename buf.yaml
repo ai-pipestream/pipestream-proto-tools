@@ -1,0 +1,22 @@
+# Buf STANDARD lint for Pipestream protobuf standards.
+# Lint only — codegen stays protoc / protobuf-gradle-plugin. Not a runtime dependency.
+version: v2
+modules:
+  - path: protobuf/metadata/src/main/proto
+    name: buf.build/ai-pipestream/protobuf-metadata
+  - path: protobuf/validation/src/main/proto
+    name: buf.build/ai-pipestream/protobuf-validation
+  - path: index/spi/src/main/proto
+    name: buf.build/ai-pipestream/protobuf-indexing-hints
+  - path: protobuf/metadata/src/test/proto
+    name: buf.build/ai-pipestream/protobuf-metadata-testdata
+  - path: protobuf/validation/src/test/proto
+    name: buf.build/ai-pipestream/protobuf-validation-testdata
+  - path: protobuf/indexing/src/test/proto
+    name: buf.build/ai-pipestream/protobuf-indexing-testdata
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

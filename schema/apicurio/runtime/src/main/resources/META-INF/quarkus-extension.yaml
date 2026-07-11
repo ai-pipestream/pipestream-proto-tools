@@ -1,0 +1,12 @@
+name: "Pipestream Proto Tools - Apicurio"
+artifact: ${project.groupId}:${project.artifactId}:${project.version}
+description: "Load protobuf descriptors from Apicurio Registry into DescriptorRegistry"
+metadata:
+  keywords:
+    - "pipestream"
+    - "protobuf"
+    - "apicurio"
+    - "schema-registry"
+  categories:
+    - "data"
+  status: "preview"

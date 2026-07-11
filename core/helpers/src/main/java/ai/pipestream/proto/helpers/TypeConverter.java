@@ -1,0 +1,321 @@
+package ai.pipestream.proto.helpers;
+
+import com.google.protobuf.*;
+import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.Descriptors.EnumDescriptor;
+import com.google.protobuf.Descriptors.EnumValueDescriptor;
+import com.google.protobuf.Descriptors.FieldDescriptor;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+/**
+ * Utility class for converting between different Protocol Buffer types.
+ * Handles conversions between messages, primitives, Struct, Value, and common Java types.
+ */
+public class TypeConverter {
+
+    /**
+     * Creates a type converter.
+     */
+    public TypeConverter() {}
+
+
+    /**
+     * Converts a Java object to a protobuf Value.
+     * Supports null, String, Number, Boolean, Struct, List, and Message types.
+     *
+     * @param value The value to convert
+     * @return A protobuf Value representation
+     * @throws IllegalArgumentException if the type cannot be converted
+     */
+    public Value toValue(Object value) {
+        switch (value) {
+            case null -> {
+                return Value.newBuilder().setNullValue(NullValue.NULL_VALUE).build();
+            }
+            case String s -> {
+                return Value.newBuilder().setStringValue(s).build();
+            }
+            case Double v -> {
+                return Value.newBuilder().setNumberValue(v).build();
+            }
+            case Float v -> {
+                return Value.newBuilder().setNumberValue(v.doubleValue()).build();
+            }
+            case Number number -> {
+                return Value.newBuilder().setNumberValue(number.doubleValue()).build();
+            }
+            case Boolean b -> {
+                return Value.newBuilder().setBoolValue(b).build();
+            }
+            case Struct struct -> {
+                return Value.newBuilder().setStructValue(struct).build();
+            }
+            //noinspection rawtypes
+            case List list -> {
+                ListValue.Builder listBuilder = ListValue.newBuilder();
+                for (Object item : list) {
+                    listBuilder.addValues(toValue(item));
+                }
+                return Value.newBuilder().setListValue(listBuilder).build();
+            }
+            case Message message -> {
+                // Convert message to Struct representation
+                return Value.newBuilder().setStructValue(messageToStruct(message)).build();
+                // Convert message to Struct representation
+            }
+            default -> {
+            }
+        }
+        throw new IllegalArgumentException("Cannot convert type to Value: " + value.getClass().getName());
+    }
+
+    /**
+     * Converts a protobuf Value to a Java object.
+     *
+     * @param value The Value to convert
+     * @return The unwrapped Java object (String, Double, Boolean, Struct, List, or null)
+     */
+    public Object fromValue(Value value) {
+        if (value == null || value.getKindCase() == Value.KindCase.NULL_VALUE) {
+            return null;
+        }
+        return switch (value.getKindCase()) {
+            case NUMBER_VALUE -> value.getNumberValue();
+            case STRING_VALUE -> value.getStringValue();
+            case BOOL_VALUE -> value.getBoolValue();
+            case STRUCT_VALUE -> value.getStructValue();
+            case LIST_VALUE -> value.getListValue().getValuesList().stream()
+                    .map(this::fromValue)
+                    .collect(Collectors.toList());
+            default -> null;
+        };
+    }
+
+    /**
+     * Converts a protobuf Message to a Struct.
+     * Recursively converts all fields to Value representations.
+     *
+     * @param message The message to convert
+     * @return A Struct representation of the message
+     */
+    public Struct messageToStruct(Message message) {
+        Struct.Builder structBuilder = Struct.newBuilder();
+        Descriptor descriptor = message.getDescriptorForType();
+
+        for (FieldDescriptor field : descriptor.getFields()) {
+            // Skip non-repeated fields that are not set
+            if (!field.isRepeated() && !message.hasField(field)) {
+                continue;
+            }
+
+            String fieldName = field.getName();
+            Object fieldValue = message.getField(field);
+
+            if (field.isRepeated()) {
+                List<?> values = (List<?>) fieldValue;
+                if (!values.isEmpty()) {
+                    ListValue.Builder listBuilder = ListValue.newBuilder();
+                    for (Object item : values) {
+                        listBuilder.addValues(fieldToValue(field, item));
+                    }
+                    structBuilder.putFields(fieldName, Value.newBuilder().setListValue(listBuilder).build());
+                }
+            } else {
+                structBuilder.putFields(fieldName, fieldToValue(field, fieldValue));
+            }
+        }
+
+        return structBuilder.build();
+    }
+
+    /**
+     * Converts a Struct to a DynamicMessage of the specified type.
+     *
+     * @param struct The Struct to convert
+     * @param descriptor The descriptor of the target message type
+     * @return A DynamicMessage built from the Struct
+     * @throws IllegalArgumentException if conversion fails
+     */
+    public DynamicMessage structToMessage(Struct struct, Descriptor descriptor) {
+        DynamicMessage.Builder builder = DynamicMessage.newBuilder(descriptor);
+
+        for (Map.Entry<String, Value> entry : struct.getFieldsMap().entrySet()) {
+            FieldDescriptor field = descriptor.findFieldByName(entry.getKey());
+            if (field == null) {
+                // Skip unknown fields
+                continue;
+            }
+
+            Object convertedValue = valueToField(entry.getValue(), field);
+            if (convertedValue != null) {
+                if (field.isRepeated() && convertedValue instanceof List) {
+                    for (Object item : (List<?>) convertedValue) {
+                        builder.addRepeatedField(field, item);
+                    }
+                } else {
+                    builder.setField(field, convertedValue);
+                }
+            }
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * Converts a field value to a protobuf Value based on the field descriptor.
+     *
+     * @param field The field descriptor
+     * @param value The field value
+     * @return A Value representation
+     */
+    private Value fieldToValue(FieldDescriptor field, Object value) {
+        if (value == null) {
+            return Value.newBuilder().setNullValue(NullValue.NULL_VALUE).build();
+        }
+
+        return switch (field.getJavaType()) {
+            case INT, LONG, FLOAT, DOUBLE -> Value.newBuilder().setNumberValue(((Number) value).doubleValue()).build();
+            case BOOLEAN -> Value.newBuilder().setBoolValue((Boolean) value).build();
+            case STRING -> Value.newBuilder().setStringValue((String) value).build();
+            case ENUM -> {
+                EnumValueDescriptor enumValue = (EnumValueDescriptor) value;
+                yield Value.newBuilder().setStringValue(enumValue.getName()).build();
+            }
+            case MESSAGE -> {
+                if (value instanceof Struct) {
+                    yield Value.newBuilder().setStructValue((Struct) value).build();
+                }
+                yield Value.newBuilder().setStructValue(messageToStruct((Message) value)).build();
+            }
+            case BYTE_STRING -> {
+                // Encode as base64 string
+                ByteString bytes = (ByteString) value;
+                yield Value.newBuilder().setStringValue(bytes.toStringUtf8()).build();
+            }
+            default -> Value.newBuilder().setNullValue(NullValue.NULL_VALUE).build();
+        };
+    }
+
+    /**
+     * Converts a protobuf Value to a field value based on the field descriptor.
+     *
+     * @param value The Value to convert
+     * @param field The target field descriptor
+     * @return The converted value appropriate for the field type
+     */
+    private Object valueToField(Value value, FieldDescriptor field) {
+        if (value.getKindCase() == Value.KindCase.NULL_VALUE) {
+            return null;
+        }
+
+        switch (field.getJavaType()) {
+            case INT:
+                return (int) value.getNumberValue();
+            case LONG:
+                return (long) value.getNumberValue();
+            case FLOAT:
+                return (float) value.getNumberValue();
+            case DOUBLE:
+                return value.getNumberValue();
+            case BOOLEAN:
+                return value.getBoolValue();
+            case STRING:
+                return value.getStringValue();
+            case ENUM:
+                EnumDescriptor enumDescriptor = field.getEnumType();
+                return enumDescriptor.findValueByName(value.getStringValue());
+            case MESSAGE:
+                if (field.getMessageType().getFullName().equals(Struct.getDescriptor().getFullName())) {
+                    return value.getStructValue();
+                }
+                if (value.getKindCase() == Value.KindCase.STRUCT_VALUE) {
+                    return structToMessage(value.getStructValue(), field.getMessageType());
+                }
+                return null;
+            case BYTE_STRING:
+                return ByteString.copyFromUtf8(value.getStringValue());
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Attempts to convert a value to match the expected type of a field.
+     * Provides intelligent type coercion where possible.
+     *
+     * @param value The value to convert
+     * @param field The target field descriptor
+     * @return The converted value, or the original if no conversion is needed
+     * @throws IllegalArgumentException if conversion is not possible
+     */
+    public Object convertToFieldType(Object value, FieldDescriptor field) {
+        if (value == null) {
+            return null;
+        }
+
+        // If value is already compatible, return as-is
+        if (isCompatibleType(value, field)) {
+            return value;
+        }
+
+        // Attempt type conversions
+        switch (field.getJavaType()) {
+            case INT:
+                if (value instanceof Number) return ((Number) value).intValue();
+                if (value instanceof String) return Integer.parseInt((String) value);
+                break;
+            case LONG:
+                if (value instanceof Number) return ((Number) value).longValue();
+                if (value instanceof String) return Long.parseLong((String) value);
+                break;
+            case FLOAT:
+                if (value instanceof Number) return ((Number) value).floatValue();
+                if (value instanceof String) return Float.parseFloat((String) value);
+                break;
+            case DOUBLE:
+                if (value instanceof Number) return ((Number) value).doubleValue();
+                if (value instanceof String) return Double.parseDouble((String) value);
+                break;
+            case BOOLEAN:
+                if (value instanceof String) return Boolean.parseBoolean((String) value);
+                break;
+            case STRING:
+                return value.toString();
+            case MESSAGE:
+                if (value instanceof Struct &&
+                    !field.getMessageType().getFullName().equals(Struct.getDescriptor().getFullName())) {
+                    return structToMessage((Struct) value, field.getMessageType());
+                }
+                break;
+        }
+
+        throw new IllegalArgumentException(
+            "Cannot convert value of type " + value.getClass().getName() +
+            " to field type " + field.getJavaType());
+    }
+
+    /**
+     * Checks if a value is compatible with a field type.
+     *
+     * @param value The value to check
+     * @param field The field descriptor
+     * @return true if the value can be assigned to the field without conversion
+     */
+    private boolean isCompatibleType(Object value, FieldDescriptor field) {
+        return switch (field.getJavaType()) {
+            case INT -> value instanceof Integer;
+            case LONG -> value instanceof Long;
+            case FLOAT -> value instanceof Float;
+            case DOUBLE -> value instanceof Double;
+            case BOOLEAN -> value instanceof Boolean;
+            case STRING -> value instanceof String;
+            case BYTE_STRING -> value instanceof ByteString;
+            case ENUM -> value instanceof EnumValueDescriptor;
+            case MESSAGE -> value instanceof Message;
+            default -> false;
+        };
+    }
+}

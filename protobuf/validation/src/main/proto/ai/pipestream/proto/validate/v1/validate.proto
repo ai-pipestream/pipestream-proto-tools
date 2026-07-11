@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package ai.pipestream.proto.validate.v1;
+
+option java_multiple_files = true;
+option java_package = "ai.pipestream.proto.validate";
+option java_outer_classname = "ValidateProto";
+
+import "google/protobuf/descriptor.proto";
+
+// Pipestream protobuf validation — CEL-first, no Buf CLI / buf.validate dependency.
+// Standard constraints are evaluated in-process; custom rules use CEL with `this`.
+
+message CelRule {
+  // Stable id unique within the field or message.
+  string id = 1;
+  // Human-readable failure message (optional; CEL string results override).
+  string message = 2;
+  // CEL expression returning bool (true = ok) or string (non-empty = failure).
+  string expression = 3;
+}
+
+message StringRules {
+  optional int64 min_len = 1;
+  optional int64 max_len = 2;
+  optional string pattern = 3;
+  optional bool email = 4;
+}
+
+message Int32Rules {
+  optional int32 gt = 1;
+  optional int32 gte = 2;
+  optional int32 lt = 3;
+  optional int32 lte = 4;
+}
+
+message Int64Rules {
+  optional int64 gt = 1;
+  optional int64 gte = 2;
+  optional int64 lt = 3;
+  optional int64 lte = 4;
+}
+
+message DoubleRules {
+  optional double gt = 1;
+  optional double gte = 2;
+  optional double lt = 3;
+  optional double lte = 4;
+}
+
+message FloatRules {
+  optional float gt = 1;
+  optional float gte = 2;
+  optional float lt = 3;
+  optional float lte = 4;
+}
+
+message FieldRules {
+  // When true, the field must be present / non-empty (proto3 semantics).
+  bool required = 1;
+  StringRules string = 2;
+  Int32Rules int32 = 3;
+  Int64Rules int64 = 4;
+  DoubleRules double = 5;
+  FloatRules float = 6;
+  repeated CelRule cel = 10;
+}
+
+message MessageRules {
+  repeated CelRule cel = 1;
+}
+
+extend google.protobuf.FieldOptions {
+  FieldRules field = 59100481;
+}
+
+extend google.protobuf.MessageOptions {
+  MessageRules message = 59100482;
+}

@@ -1,0 +1,14 @@
+description = 'Spring MVC host adapter for protobuf JSON/REST'
+
+dependencies {
+    api project(':pipestream-proto-tools-server-common')
+    compileOnly libs.spring.context
+    compileOnly libs.spring.web
+
+    testImplementation libs.spring.context
+    testImplementation libs.spring.web
+    testImplementation libs.spring.webmvc
+    testImplementation libs.spring.test
+    testImplementation 'jakarta.servlet:jakarta.servlet-api:6.1.0'
+    testImplementation project(':pipestream-proto-tools-json')
+}

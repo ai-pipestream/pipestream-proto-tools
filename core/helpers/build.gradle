@@ -1,0 +1,12 @@
+description = 'Shared protobuf and JSON helper APIs'
+
+dependencies {
+    api project(':pipestream-proto-tools-descriptors')
+    api libs.jackson.databind
+    api libs.protobuf.java.util
+
+    testImplementation platform(libs.junit.bom)
+    testImplementation libs.junit.jupiter
+    testImplementation libs.assertj.core
+    testRuntimeOnly libs.junit.platform.launcher
+}

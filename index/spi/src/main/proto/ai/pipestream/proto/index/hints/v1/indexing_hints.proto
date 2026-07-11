@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package ai.pipestream.proto.index.hints.v1;
+
+option java_multiple_files = true;
+option java_package = "ai.pipestream.proto.index.hints";
+option java_outer_classname = "IndexingHintsProto";
+
+import "google/protobuf/descriptor.proto";
+
+// Engine-agnostic indexing hint attached to a field.
+// Lucene / OpenSearch / Solr plugins interpret IndexFieldType; NDJSON ignores it.
+// Same FieldOptions pattern as Protovalidate — no Buf CLI required; plain protoc is enough.
+enum IndexFieldType {
+  INDEX_FIELD_TYPE_UNSPECIFIED = 0;
+  INDEX_FIELD_TYPE_TEXT = 1;
+  INDEX_FIELD_TYPE_KEYWORD = 2;
+  INDEX_FIELD_TYPE_INT32 = 3;
+  INDEX_FIELD_TYPE_INT64 = 4;
+  INDEX_FIELD_TYPE_FLOAT = 5;
+  INDEX_FIELD_TYPE_DOUBLE = 6;
+  INDEX_FIELD_TYPE_BOOLEAN = 7;
+  INDEX_FIELD_TYPE_DATE = 8;
+  INDEX_FIELD_TYPE_BINARY = 9;
+  INDEX_FIELD_TYPE_VECTOR = 10;
+  INDEX_FIELD_TYPE_OBJECT = 11;
+  INDEX_FIELD_TYPE_NESTED = 12;
+  INDEX_FIELD_TYPE_SKIP = 13;
+}
+
+message FieldIndexHint {
+  IndexFieldType type = 1;
+  optional bool stored = 2;
+  optional bool indexed = 3;
+  // Override the index field name; empty = use proto field name.
+  string name = 4;
+  int32 vector_dims = 5;
+}
+
+extend google.protobuf.FieldOptions {
+  // Unique extension id for pipestream indexing hints.
+  FieldIndexHint index = 59100471;
+}
+
+extend google.protobuf.MessageOptions {
+  // When true, walk nested fields into the indexing plan (default true for top-level).
+  bool index_message = 59100472;
+}

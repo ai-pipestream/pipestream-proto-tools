@@ -1,0 +1,51 @@
+[versions]
+protobuf = "4.35.1"
+cel = "0.13.1"
+junit = "6.1.1"
+assertj = "3.27.7"
+slf4j = "2.0.18"
+jackson = "2.22.1"
+quarkus = "3.37.2"
+axion-release = "1.21.2"
+lucene = "10.5.0"
+apicurio = "3.3.0"
+spring = "7.0.8"
+vertx = "5.1.4"
+netty = "4.2.16.Final"
+micronaut = "5.1.5"
+protobuf-gradle = "0.10.0"
+
+[libraries]
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
+cel = { module = "dev.cel:cel", version.ref = "cel" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+quarkus-bom = { module = "io.quarkus.platform:quarkus-bom", version.ref = "quarkus" }
+quarkus-arc = { module = "io.quarkus:quarkus-arc" }
+quarkus-arc-deployment = { module = "io.quarkus:quarkus-arc-deployment" }
+lucene-core = { module = "org.apache.lucene:lucene-core", version.ref = "lucene" }
+apicurio-registry-java-sdk = { module = "io.apicurio:apicurio-registry-java-sdk", version.ref = "apicurio" }
+apicurio-registry-protobuf-serde = { module = "io.apicurio:apicurio-registry-protobuf-serde-kafka", version.ref = "apicurio" }
+spring-context = { module = "org.springframework:spring-context", version.ref = "spring" }
+spring-web = { module = "org.springframework:spring-web", version.ref = "spring" }
+spring-webmvc = { module = "org.springframework:spring-webmvc", version.ref = "spring" }
+spring-test = { module = "org.springframework:spring-test", version.ref = "spring" }
+spring-core = { module = "org.springframework:spring-core", version.ref = "spring" }
+vertx-core = { module = "io.vertx:vertx-core", version.ref = "vertx" }
+vertx-web = { module = "io.vertx:vertx-web", version.ref = "vertx" }
+vertx-junit5 = { module = "io.vertx:vertx-junit5", version.ref = "vertx" }
+vertx-web-client = { module = "io.vertx:vertx-web-client", version.ref = "vertx" }
+netty-codec-http = { module = "io.netty:netty-codec-http", version.ref = "netty" }
+netty-transport = { module = "io.netty:netty-transport", version.ref = "netty" }
+micronaut-http-server-netty = { module = "io.micronaut:micronaut-http-server-netty", version.ref = "micronaut" }
+micronaut-inject = { module = "io.micronaut:micronaut-inject", version.ref = "micronaut" }
+
+[plugins]
+axion-release = { id = "pl.allegro.tech.build.axion-release", version.ref = "axion-release" }
+quarkus-extension = { id = "io.quarkus.extension", version.ref = "quarkus" }
+protobuf = { id = "com.google.protobuf", version.ref = "protobuf-gradle" }

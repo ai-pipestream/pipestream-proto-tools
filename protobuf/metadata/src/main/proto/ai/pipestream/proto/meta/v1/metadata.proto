@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package ai.pipestream.proto.meta.v1;
+
+option java_multiple_files = true;
+option java_package = "ai.pipestream.proto.meta";
+option java_outer_classname = "MetadataProto";
+
+import "google/protobuf/descriptor.proto";
+
+// How Pipestream holds descriptive / operational metadata on protobuf schemas.
+// Independent of validation and indexing — those standards may read labels but
+// do not own this option namespace.
+
+message FieldMeta {
+  // Human-readable description (docs, OpenAPI, UI).
+  string description = 1;
+  // Display label override (empty = use field name).
+  string display_name = 2;
+  // Owning team / system.
+  string owner = 3;
+  // Sensitivity class: e.g. public, internal, pii, secret.
+  string sensitivity = 4;
+  // Free-form labels for routing, policy, and extraction.
+  map<string, string> labels = 5;
+}
+
+message MessageMeta {
+  string description = 1;
+  string owner = 2;
+  string sensitivity = 3;
+  map<string, string> labels = 4;
+}
+
+extend google.protobuf.FieldOptions {
+  FieldMeta field = 59100491;
+}
+
+extend google.protobuf.MessageOptions {
+  MessageMeta message = 59100492;
+}

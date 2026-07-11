@@ -1,0 +1,7 @@
+description = 'Protobuf JSON transcoder (typed and dynamic)'
+
+dependencies {
+    api project(':pipestream-proto-tools-descriptors')
+    api libs.protobuf.java.util
+    api libs.slf4j.api
+}

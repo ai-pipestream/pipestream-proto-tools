@@ -1,0 +1,134 @@
+plugins {
+    alias(libs.plugins.axion.release)
+}
+
+scmVersion {
+    tag {
+        prefix = 'v'
+    }
+    checks {
+        uncommittedChanges = false
+        aheadOfRemote = false
+        snapshotDependencies = false
+    }
+}
+
+allprojects {
+    group = 'ai.pipestream'
+    version = findProperty('publishVersion') ?: rootProject.scmVersion.version
+}
+
+tasks.register('bufLint', Exec) {
+    group = 'verification'
+    description = 'Run buf lint (STANDARD) on Pipestream protobuf standards'
+    workingDir = rootDir
+    commandLine 'buf', 'lint'
+    inputs.files(fileTree(rootDir) {
+        include 'buf.yaml'
+        include '**/src/main/proto/**/*.proto'
+        include '**/src/test/proto/**/*.proto'
+        exclude '**/build/**'
+    })
+}
+
+tasks.register('check') {
+    group = 'verification'
+    dependsOn('bufLint')
+}
+
+subprojects {
+    repositories {
+        mavenCentral()
+    }
+
+    if (project.name == 'bom') {
+        apply plugin: 'java-platform'
+        apply plugin: 'version-catalog'
+    } else {
+        apply plugin: 'java-library'
+
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(25)
+            }
+        }
+
+        tasks.withType(Test).configureEach {
+            useJUnitPlatform()
+            maxParallelForks = Math.max(1, Runtime.runtime.availableProcessors().intdiv(2))
+        }
+
+        if (project.name != 'samples') {
+            dependencies {
+                testImplementation platform(libs.junit.bom)
+                testImplementation libs.junit.jupiter
+                testImplementation libs.assertj.core
+                testRuntimeOnly libs.junit.platform.launcher
+            }
+        }
+    }
+
+    if (project.name != 'samples') {
+        apply plugin: 'maven-publish'
+        apply plugin: 'signing'
+
+        if (project.name != 'bom') {
+            java {
+                withSourcesJar()
+                withJavadocJar()
+            }
+        }
+
+        publishing {
+            publications {
+                create('maven', MavenPublication) {
+                    if (project.name == 'bom') {
+                        from components.javaPlatform
+                        artifactId = 'pipestream-proto-tools-bom'
+                    } else {
+                        from components.java
+                    }
+                    pom {
+                        name = project.name == 'bom'
+                            ? 'Pipestream Proto Tools BOM'
+                            : project.name
+                        description = project.description ?: 'Pipestream protobuf tooling'
+                        url = 'https://github.com/ai-pipestream/pipestream-proto-tools'
+                        licenses {
+                            license {
+                                name = 'MIT License'
+                                url = 'https://opensource.org/licenses/MIT'
+                            }
+                        }
+                        scm {
+                            connection = 'scm:git:https://github.com/ai-pipestream/pipestream-proto-tools.git'
+                            developerConnection = 'scm:git:ssh://git@github.com/ai-pipestream/pipestream-proto-tools.git'
+                            url = 'https://github.com/ai-pipestream/pipestream-proto-tools'
+                        }
+                    }
+                }
+                if (project.name == 'bom') {
+                    create('catalog', MavenPublication) {
+                        from components.versionCatalog
+                        artifactId = 'pipestream-proto-tools-bom-catalog'
+                        pom {
+                            name = 'Pipestream Proto Tools BOM Catalog'
+                            description = 'Gradle version catalog for Pipestream protobuf tools'
+                            url = 'https://github.com/ai-pipestream/pipestream-proto-tools'
+                        }
+                    }
+                }
+            }
+        }
+
+        signing {
+            def signingKey = System.getenv('GPG_PRIVATE_KEY')
+            def signingPassword = System.getenv('GPG_PASSPHRASE')
+            required { signingKey != null }
+            if (signingKey) {
+                useInMemoryPgpKeys(signingKey, signingPassword)
+                sign publishing.publications
+            }
+        }
+    }
+}

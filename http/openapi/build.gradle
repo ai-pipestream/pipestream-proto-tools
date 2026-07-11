@@ -1,0 +1,6 @@
+description = 'OpenAPI 3.x generation from protobuf service descriptors'
+
+dependencies {
+    api project(':pipestream-proto-tools-rest')
+    api libs.jackson.databind
+}

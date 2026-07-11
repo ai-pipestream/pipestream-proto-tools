@@ -1,0 +1,20 @@
+plugins {
+    alias(libs.plugins.quarkus.extension)
+}
+
+description = 'Quarkus extension for Pipestream protobuf tools'
+
+quarkusExtension {
+    deploymentModule = 'pipestream-proto-tools-quarkus-deployment'
+}
+
+dependencies {
+    implementation platform(libs.quarkus.bom)
+    api project(':pipestream-proto-tools-mapper-cel')
+    api project(':pipestream-proto-tools-rest')
+    api libs.quarkus.arc
+}
+
+tasks.matching { it.name == 'validateExtension' }.configureEach {
+    enabled = false
+}

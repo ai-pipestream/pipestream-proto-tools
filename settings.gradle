@@ -1,0 +1,104 @@
+pluginManagement {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'pipestream-proto-tools'
+
+include 'bom'
+
+include 'pipestream-proto-tools-descriptors'
+project(':pipestream-proto-tools-descriptors').projectDir = file('core/descriptors')
+
+include 'pipestream-proto-tools-helpers'
+project(':pipestream-proto-tools-helpers').projectDir = file('core/helpers')
+
+include 'pipestream-proto-tools-mapper-core'
+project(':pipestream-proto-tools-mapper-core').projectDir = file('mapper/core')
+
+include 'pipestream-proto-tools-mapper-cel'
+project(':pipestream-proto-tools-mapper-cel').projectDir = file('mapper/cel')
+
+include 'pipestream-proto-tools-metadata'
+project(':pipestream-proto-tools-metadata').projectDir = file('mapper/metadata')
+
+include 'pipestream-proto-tools-protobuf-metadata'
+project(':pipestream-proto-tools-protobuf-metadata').projectDir = file('protobuf/metadata')
+
+include 'pipestream-proto-tools-protobuf-validation'
+project(':pipestream-proto-tools-protobuf-validation').projectDir = file('protobuf/validation')
+
+include 'pipestream-proto-tools-protobuf-indexing'
+project(':pipestream-proto-tools-protobuf-indexing').projectDir = file('protobuf/indexing')
+
+include 'pipestream-proto-tools-schema-apicurio'
+project(':pipestream-proto-tools-schema-apicurio').projectDir = file('schema/apicurio/runtime')
+
+include 'pipestream-proto-tools-schema-apicurio-deployment'
+project(':pipestream-proto-tools-schema-apicurio-deployment').projectDir = file('schema/apicurio/deployment')
+
+include 'pipestream-proto-tools-schema-confluent'
+project(':pipestream-proto-tools-schema-confluent').projectDir = file('schema/confluent')
+
+include 'pipestream-proto-tools-index-spi'
+project(':pipestream-proto-tools-index-spi').projectDir = file('index/spi')
+
+include 'pipestream-proto-tools-index-ndjson'
+project(':pipestream-proto-tools-index-ndjson').projectDir = file('index/ndjson')
+
+include 'pipestream-proto-tools-index-lucene'
+project(':pipestream-proto-tools-index-lucene').projectDir = file('index/lucene')
+
+include 'pipestream-proto-tools-index-opensearch'
+project(':pipestream-proto-tools-index-opensearch').projectDir = file('index/opensearch')
+
+include 'pipestream-proto-tools-index-solr'
+project(':pipestream-proto-tools-index-solr').projectDir = file('index/solr')
+
+include 'pipestream-proto-tools-json'
+project(':pipestream-proto-tools-json').projectDir = file('http/json')
+
+include 'pipestream-proto-tools-rest'
+project(':pipestream-proto-tools-rest').projectDir = file('http/rest')
+
+include 'pipestream-proto-tools-openapi'
+project(':pipestream-proto-tools-openapi').projectDir = file('http/openapi')
+
+include 'pipestream-proto-tools-quarkus'
+project(':pipestream-proto-tools-quarkus').projectDir = file('integrations/quarkus/runtime')
+
+include 'pipestream-proto-tools-quarkus-deployment'
+project(':pipestream-proto-tools-quarkus-deployment').projectDir = file('integrations/quarkus/deployment')
+
+include 'pipestream-proto-tools-spring'
+project(':pipestream-proto-tools-spring').projectDir = file('integrations/spring')
+
+include 'pipestream-proto-tools-server-common'
+project(':pipestream-proto-tools-server-common').projectDir = file('servers/common')
+
+include 'pipestream-proto-tools-server-jdk'
+project(':pipestream-proto-tools-server-jdk').projectDir = file('servers/jdk')
+
+include 'pipestream-proto-tools-server-vertx'
+project(':pipestream-proto-tools-server-vertx').projectDir = file('servers/vertx')
+
+include 'pipestream-proto-tools-server-netty'
+project(':pipestream-proto-tools-server-netty').projectDir = file('servers/netty')
+
+include 'pipestream-proto-tools-server-spring'
+project(':pipestream-proto-tools-server-spring').projectDir = file('servers/spring')
+
+include 'pipestream-proto-tools-server-micronaut'
+project(':pipestream-proto-tools-server-micronaut').projectDir = file('servers/micronaut')
+
+include 'pipestream-proto-tools-server-quarkus'
+project(':pipestream-proto-tools-server-quarkus').projectDir = file('servers/quarkus')
+
+include 'samples'

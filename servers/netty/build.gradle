@@ -1,0 +1,7 @@
+description = 'Netty host scaffold for protobuf JSON/REST'
+
+dependencies {
+    api project(':pipestream-proto-tools-server-common')
+    api libs.netty.codec.http
+    api libs.netty.transport
+}

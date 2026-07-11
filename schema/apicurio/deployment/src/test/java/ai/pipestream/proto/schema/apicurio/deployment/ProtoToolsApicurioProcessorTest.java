@@ -1,0 +1,26 @@
+package ai.pipestream.proto.schema.apicurio.deployment;
+
+import ai.pipestream.proto.schema.apicurio.ApicurioDescriptorInstaller;
+import ai.pipestream.proto.schema.apicurio.ApicurioDescriptorLoaderProducer;
+import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
+import io.quarkus.deployment.builditem.FeatureBuildItem;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ProtoToolsApicurioProcessorTest {
+
+    @Test
+    void registersFeatureAndUnremovableBeans() {
+        ProtoToolsApicurioProcessor processor = new ProtoToolsApicurioProcessor();
+        FeatureBuildItem feature = processor.feature();
+        assertThat(feature.getName()).isEqualTo("pipestream-proto-tools-schema-apicurio");
+
+        AdditionalBeanBuildItem beans = processor.registerBeans();
+        assertThat(beans.isRemovable()).isFalse();
+        assertThat(beans.getBeanClasses())
+                .contains(
+                        ApicurioDescriptorLoaderProducer.class.getName(),
+                        ApicurioDescriptorInstaller.class.getName());
+    }
+}

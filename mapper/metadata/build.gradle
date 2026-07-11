@@ -1,0 +1,5 @@
+description = 'Protobuf metadata extraction and mapping'
+
+dependencies {
+    api project(':pipestream-proto-tools-mapper-cel')
+}

@@ -1,0 +1,16 @@
+plugins {
+    alias(libs.plugins.protobuf)
+}
+
+description = 'Protobuf validation standard — CEL-driven field and message constraints'
+
+dependencies {
+    api project(':pipestream-proto-tools-mapper-cel')
+    api libs.protobuf.java
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:4.35.1"
+    }
+}

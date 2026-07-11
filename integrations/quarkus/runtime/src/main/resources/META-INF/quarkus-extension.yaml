@@ -1,0 +1,8 @@
+name: "Pipestream Proto Tools"
+metadata:
+  keywords:
+    - "protobuf"
+    - "cel"
+  categories:
+    - "integration"
+  status: "experimental"

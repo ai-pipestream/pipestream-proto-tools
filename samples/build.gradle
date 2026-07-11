@@ -1,0 +1,21 @@
+description = 'Examples for Pipestream protobuf tools'
+
+dependencies {
+    implementation project(':pipestream-proto-tools-mapper-cel')
+    implementation project(':pipestream-proto-tools-server-jdk')
+}
+
+tasks.register('runCelMapping', JavaExec) {
+    group = 'application'
+    description = 'Run CelMappingSample'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'ai.pipestream.proto.samples.CelMappingSample'
+}
+
+tasks.register('runJsonRestServer', JavaExec) {
+    group = 'application'
+    description = 'Run JsonRestServerSample (JDK HttpServer)'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'ai.pipestream.proto.samples.JsonRestServerSample'
+    args = ['8080', 'secret']
+}

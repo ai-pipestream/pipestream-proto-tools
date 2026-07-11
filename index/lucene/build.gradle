@@ -1,0 +1,7 @@
+description = 'Lucene document mapper plugin (ServiceLoader)'
+
+dependencies {
+    api project(':pipestream-proto-tools-index-spi')
+    api project(':pipestream-proto-tools-mapper-core')
+    api libs.lucene.core
+}

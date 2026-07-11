@@ -1,0 +1,45 @@
+description = 'Bill of materials for the Pipestream protobuf tools suite'
+
+javaPlatform {
+    allowDependencies()
+}
+
+catalog {
+    versionCatalog {
+        from(files('../gradle/libs.versions.toml'))
+    }
+}
+
+dependencies {
+    constraints {
+        api project(':pipestream-proto-tools-descriptors')
+        api project(':pipestream-proto-tools-helpers')
+        api project(':pipestream-proto-tools-mapper-core')
+        api project(':pipestream-proto-tools-mapper-cel')
+        api project(':pipestream-proto-tools-schema-apicurio')
+        api project(':pipestream-proto-tools-schema-apicurio-deployment')
+        api project(':pipestream-proto-tools-schema-confluent')
+        api project(':pipestream-proto-tools-metadata')
+        api project(':pipestream-proto-tools-protobuf-metadata')
+        api project(':pipestream-proto-tools-protobuf-validation')
+        api project(':pipestream-proto-tools-protobuf-indexing')
+        api project(':pipestream-proto-tools-index-spi')
+        api project(':pipestream-proto-tools-index-ndjson')
+        api project(':pipestream-proto-tools-index-lucene')
+        api project(':pipestream-proto-tools-index-opensearch')
+        api project(':pipestream-proto-tools-index-solr')
+        api project(':pipestream-proto-tools-quarkus')
+        api project(':pipestream-proto-tools-quarkus-deployment')
+        api project(':pipestream-proto-tools-spring')
+        api project(':pipestream-proto-tools-server-common')
+        api project(':pipestream-proto-tools-server-jdk')
+        api project(':pipestream-proto-tools-server-vertx')
+        api project(':pipestream-proto-tools-server-netty')
+        api project(':pipestream-proto-tools-server-spring')
+        api project(':pipestream-proto-tools-server-micronaut')
+        api project(':pipestream-proto-tools-server-quarkus')
+        api project(':pipestream-proto-tools-json')
+        api project(':pipestream-proto-tools-rest')
+        api project(':pipestream-proto-tools-openapi')
+    }
+}

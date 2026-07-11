@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package ai.pipestream.proto.indexing.testdata.v1;
+
+option java_multiple_files = true;
+option java_package = "ai.pipestream.proto.indexing.testdata";
+
+import "ai/pipestream/proto/index/hints/v1/indexing_hints.proto";
+import "ai/pipestream/proto/validate/v1/validate.proto";
+
+message IndexableDoc {
+  string doc_id = 1 [
+    (ai.pipestream.proto.index.hints.v1.index) = { type: INDEX_FIELD_TYPE_KEYWORD },
+    (ai.pipestream.proto.validate.v1.field) = {
+      required: true
+      string: { min_len: 1 }
+    }
+  ];
+
+  string title = 2 [
+    (ai.pipestream.proto.index.hints.v1.index) = { type: INDEX_FIELD_TYPE_TEXT },
+    (ai.pipestream.proto.validate.v1.field) = {
+      required: true
+      string: { min_len: 2 }
+    }
+  ];
+
+  int32 page_count = 3 [
+    (ai.pipestream.proto.index.hints.v1.index) = { type: INDEX_FIELD_TYPE_INT32 },
+    (ai.pipestream.proto.validate.v1.field) = {
+      int32: { gte: 0 }
+    }
+  ];
+}

@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package ai.pipestream.proto.meta.testdata.v1;
+
+option java_multiple_files = true;
+option java_package = "ai.pipestream.proto.meta.testdata";
+
+import "ai/pipestream/proto/meta/v1/metadata.proto";
+
+message AnnotatedDoc {
+  option (ai.pipestream.proto.meta.v1.message) = {
+    description: "Search document"
+    owner: "search-platform"
+    sensitivity: "internal"
+    labels: {
+      key: "domain"
+      value: "docs"
+    }
+  };
+
+  string doc_id = 1 [(ai.pipestream.proto.meta.v1.field) = {
+    description: "Stable document id"
+    display_name: "Document ID"
+    sensitivity: "public"
+    labels: {
+      key: "role"
+      value: "id"
+    }
+  }];
+
+  string title = 2 [(ai.pipestream.proto.meta.v1.field) = {
+    description: "Display title"
+    owner: "content"
+    sensitivity: "public"
+  }];
+}

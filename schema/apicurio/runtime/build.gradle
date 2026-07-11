@@ -1,0 +1,27 @@
+plugins {
+    alias(libs.plugins.quarkus.extension)
+}
+
+description = 'Apicurio Registry descriptor loader - Quarkus runtime'
+
+quarkusExtension {
+    deploymentModule = 'pipestream-proto-tools-schema-apicurio-deployment'
+}
+
+dependencies {
+    implementation platform(libs.quarkus.bom)
+
+    api project(':pipestream-proto-tools-descriptors')
+    api project(':pipestream-proto-tools-helpers')
+    api libs.apicurio.registry.java.sdk
+    implementation libs.apicurio.registry.protobuf.serde
+    implementation libs.quarkus.arc
+    implementation libs.slf4j.api
+
+    annotationProcessor platform(libs.quarkus.bom)
+    annotationProcessor 'io.quarkus:quarkus-extension-processor'
+}
+
+tasks.matching { it.name == 'validateExtension' }.configureEach {
+    enabled = false
+}

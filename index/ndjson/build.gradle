@@ -1,0 +1,6 @@
+description = 'Engine-agnostic protobuf → NDJSON encoding'
+
+dependencies {
+    api project(':pipestream-proto-tools-descriptors')
+    api libs.protobuf.java.util
+}
