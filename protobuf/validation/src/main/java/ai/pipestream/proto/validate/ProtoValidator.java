@@ -6,6 +6,7 @@ import ai.pipestream.proto.cel.CelEvaluator;
 import ai.pipestream.proto.validate.cel.ValidationCelFunctions;
 import ai.pipestream.proto.validate.model.BoolConstraints;
 import ai.pipestream.proto.validate.model.BytesConstraints;
+import ai.pipestream.proto.validate.model.BytesFormat;
 import ai.pipestream.proto.validate.model.CelConstraint;
 import ai.pipestream.proto.validate.model.DurationConstraints;
 import ai.pipestream.proto.validate.model.EnumConstraints;
@@ -628,6 +629,9 @@ public final class ProtoValidator {
             BytesConstraints rules, ByteString value, String path,
             List<ValidationResult.Violation> violations) {
         int size = value.size();
+        if (rules.constant().isPresent() && !value.equals(rules.constant().get())) {
+            violations.add(violation(path, "bytes.const", "must equal the required bytes"));
+        }
         if (rules.len().isPresent() && size != rules.len().getAsLong()) {
             violations.add(violation(path, "bytes.len",
                     "length must be exactly " + rules.len().getAsLong() + " bytes"));
@@ -648,6 +652,28 @@ public final class ProtoValidator {
         }
         if (rules.contains().isPresent() && !bytesContain(value, rules.contains().get())) {
             violations.add(violation(path, "bytes.contains", "must contain the required bytes"));
+        }
+        if (rules.pattern().isPresent()) {
+            // Match the bytes as a Latin-1 string so each byte maps to exactly one char.
+            String asLatin1 = new String(value.toByteArray(), java.nio.charset.StandardCharsets.ISO_8859_1);
+            try {
+                if (!Pattern.compile(rules.pattern().get()).matcher(asLatin1).find()) {
+                    violations.add(violation(path, "bytes.pattern", "value does not match pattern"));
+                }
+            } catch (PatternSyntaxException e) {
+                violations.add(violation(path, "bytes.pattern", "invalid pattern: " + e.getMessage()));
+            }
+        }
+        if (!rules.in().isEmpty() && !rules.in().contains(value)) {
+            violations.add(violation(path, "bytes.in", "must be one of the allowed values"));
+        }
+        if (!rules.notIn().isEmpty() && rules.notIn().contains(value)) {
+            violations.add(violation(path, "bytes.not_in", "must not be one of the forbidden values"));
+        }
+        for (BytesFormat format : rules.formats()) {
+            if (!format.matches(size)) {
+                violations.add(violation(path, format.ruleId(), format.defaultMessage()));
+            }
         }
     }
 

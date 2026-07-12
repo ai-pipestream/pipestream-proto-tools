@@ -322,13 +322,26 @@ public final class AiPipestreamRuleSource implements ValidationRuleSource {
     }
 
     private static BytesConstraints toBytes(BytesRules r) {
-        return new BytesConstraints(
-                r.hasLen() ? OptionalLong.of(r.getLen()) : OptionalLong.empty(),
-                r.hasMinLen() ? OptionalLong.of(r.getMinLen()) : OptionalLong.empty(),
-                r.hasMaxLen() ? OptionalLong.of(r.getMaxLen()) : OptionalLong.empty(),
-                r.hasPrefix() ? Optional.of(r.getPrefix()) : Optional.empty(),
-                r.hasSuffix() ? Optional.of(r.getSuffix()) : Optional.empty(),
-                r.hasContains() ? Optional.of(r.getContains()) : Optional.empty());
+        BytesConstraints.Builder b = BytesConstraints.builder();
+        if (r.hasLen()) {
+            b.len(r.getLen());
+        }
+        if (r.hasMinLen()) {
+            b.minLen(r.getMinLen());
+        }
+        if (r.hasMaxLen()) {
+            b.maxLen(r.getMaxLen());
+        }
+        if (r.hasPrefix()) {
+            b.prefix(r.getPrefix());
+        }
+        if (r.hasSuffix()) {
+            b.suffix(r.getSuffix());
+        }
+        if (r.hasContains()) {
+            b.contains(r.getContains());
+        }
+        return b.build();
     }
 
     private static EnumConstraints toEnum(EnumRules r) {

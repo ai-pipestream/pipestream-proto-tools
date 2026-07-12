@@ -3,6 +3,7 @@ package ai.pipestream.proto.validate.buf;
 import ai.pipestream.proto.validate.RuleCompilationException;
 import ai.pipestream.proto.validate.model.BoolConstraints;
 import ai.pipestream.proto.validate.model.BytesConstraints;
+import ai.pipestream.proto.validate.model.BytesFormat;
 import ai.pipestream.proto.validate.model.CelConstraint;
 import ai.pipestream.proto.validate.model.DurationConstraints;
 import ai.pipestream.proto.validate.model.EnumConstraints;
@@ -628,14 +629,48 @@ public final class ProtovalidateRuleSource implements ValidationRuleSource {
     }
 
     private static BytesConstraints toBytes(BytesRules r) {
-        // pattern / in / not_in / ip forms are not yet evaluable by the core — skipped.
-        return new BytesConstraints(
-                r.hasLen() ? OptionalLong.of(r.getLen()) : OptionalLong.empty(),
-                r.hasMinLen() ? OptionalLong.of(r.getMinLen()) : OptionalLong.empty(),
-                r.hasMaxLen() ? OptionalLong.of(r.getMaxLen()) : OptionalLong.empty(),
-                r.hasPrefix() ? Optional.of(r.getPrefix()) : Optional.empty(),
-                r.hasSuffix() ? Optional.of(r.getSuffix()) : Optional.empty(),
-                r.hasContains() ? Optional.of(r.getContains()) : Optional.empty());
+        BytesConstraints.Builder b = BytesConstraints.builder();
+        if (r.hasConst()) {
+            b.constant(r.getConst());
+        }
+        if (r.hasLen()) {
+            b.len(r.getLen());
+        }
+        if (r.hasMinLen()) {
+            b.minLen(r.getMinLen());
+        }
+        if (r.hasMaxLen()) {
+            b.maxLen(r.getMaxLen());
+        }
+        if (r.hasPrefix()) {
+            b.prefix(r.getPrefix());
+        }
+        if (r.hasSuffix()) {
+            b.suffix(r.getSuffix());
+        }
+        if (r.hasContains()) {
+            b.contains(r.getContains());
+        }
+        if (r.hasPattern() && !r.getPattern().isEmpty()) {
+            b.pattern(r.getPattern());
+        }
+        b.in(r.getInList());
+        b.notIn(r.getNotInList());
+        switch (r.getWellKnownCase()) {
+            case IP -> applyBytesFlag(b, BytesFormat.IP, r.getIp());
+            case IPV4 -> applyBytesFlag(b, BytesFormat.IPV4, r.getIpv4());
+            case IPV6 -> applyBytesFlag(b, BytesFormat.IPV6, r.getIpv6());
+            case UUID -> applyBytesFlag(b, BytesFormat.UUID, r.getUuid());
+            default -> {
+            }
+        }
+        return b.build();
+    }
+
+    private static void applyBytesFlag(BytesConstraints.Builder b, BytesFormat format, boolean on) {
+        if (on) {
+            b.format(format);
+        }
     }
 
     private static EnumConstraints toEnum(EnumRules r) {
