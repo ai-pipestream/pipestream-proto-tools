@@ -4,4 +4,6 @@ dependencies {
     api project(':pipestream-proto-tools-rest')
     api project(':pipestream-proto-tools-openapi')
     api libs.slf4j.api
+    // Structured (non-proto) JSON envelopes go through Jackson rather than a hand-rolled escaper.
+    implementation libs.jackson.databind
 }

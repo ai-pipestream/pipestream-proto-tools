@@ -6,6 +6,9 @@ import ai.pipestream.proto.rest.MethodNotFoundException;
 import ai.pipestream.proto.rest.ProtoRestException;
 import ai.pipestream.proto.rest.ServiceNotFoundException;
 import ai.pipestream.proto.rest.UnauthorizedProtoRestException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -21,6 +24,8 @@ public final class ProtoRestHttpSupport {
 
     /** HTTP methods the OpenAPI generator may document via {@code @ProtoRestExposed(httpMethods=...)}. */
     private static final Set<String> ALLOWED_HTTP_METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE");
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private ProtoRestHttpSupport() {
     }
@@ -108,7 +113,15 @@ public final class ProtoRestHttpSupport {
         Throwable cause = unwrap(err);
         int status = statusFor(cause);
         String message = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-        return "{\"error\":" + jsonString(message) + ",\"status\":" + status + "}";
+        ObjectNode node = JSON.createObjectNode();
+        node.put("error", message);
+        node.put("status", status);
+        try {
+            return JSON.writeValueAsString(node);
+        } catch (JsonProcessingException e) {
+            // A node of a string and an int cannot fail to serialize; treat as a server fault.
+            throw new IllegalStateException("failed to serialize error response JSON", e);
+        }
     }
 
     public static Throwable unwrap(Throwable err) {
@@ -120,28 +133,6 @@ public final class ProtoRestHttpSupport {
             walk = walk.getCause();
         }
         return err;
-    }
-
-    public static String jsonString(String value) {
-        StringBuilder sb = new StringBuilder("\"");
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '"' -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default -> {
-                    if (c < 0x20) {
-                        sb.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        sb.append(c);
-                    }
-                }
-            }
-        }
-        return sb.append('"').toString();
     }
 
     private static String decode(String value) {

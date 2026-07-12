@@ -1,6 +1,9 @@
 package ai.pipestream.proto.index.ndjson;
 
 import ai.pipestream.proto.descriptors.DescriptorRegistry;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.JsonFormat;
@@ -17,6 +20,10 @@ import java.util.Objects;
  * OpenSearch / Solr) are separate ServiceLoader plugins that consume {@code IndexingPlan}.
  */
 public final class ProtoNdjsonWriter {
+
+    // The message body is proto3 JSON via JsonFormat; only the small bulk-action envelope (an
+    // ordinary JSON object of index name and id) is built with Jackson, so no JSON is hand-escaped.
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final JsonFormat.Printer printer;
 
@@ -149,36 +156,18 @@ public final class ProtoNdjsonWriter {
     }
 
     private static String bulkAction(String op, String index, String id) {
-        StringBuilder sb = new StringBuilder(64);
-        sb.append("{\"").append(op).append("\":{\"_index\":").append(jsonString(index));
+        ObjectNode action = JSON.createObjectNode();
+        ObjectNode meta = action.putObject(op);
+        meta.put("_index", index);
         if (id != null && !id.isBlank()) {
-            sb.append(",\"_id\":").append(jsonString(id));
+            meta.put("_id", id);
         }
-        sb.append("}}");
-        return sb.toString();
-    }
-
-    private static String jsonString(String value) {
-        StringBuilder sb = new StringBuilder(value.length() + 2);
-        sb.append('"');
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '"' -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default -> {
-                    if (c < 0x20) {
-                        sb.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        sb.append(c);
-                    }
-                }
-            }
+        try {
+            return JSON.writeValueAsString(action);
+        } catch (JsonProcessingException e) {
+            // An object of two strings cannot fail to serialize.
+            throw new IllegalStateException("failed to serialize bulk action metadata", e);
         }
-        return sb.append('"').toString();
     }
 
     /** Convenience for callers that prefer {@link Writer}. */
