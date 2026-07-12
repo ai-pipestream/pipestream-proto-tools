@@ -59,6 +59,13 @@ class MicronautProtoRestFacadeTest {
     }
 
     @Test
+    void dispatchesEmptyJsonWhenBodyAbsent() {
+        MicronautProtoRestFacade.Result ok = facade.invoke("EchoService", "Echo", null, Map.of(), Map.of());
+        assertThat(ok.status()).isEqualTo(200);
+        assertThat(ok.body()).contains("hello ");
+    }
+
+    @Test
     void mapsMissingServiceAndUnauthorized() {
         assertThat(facade.invoke("Missing", "Echo", "{}", null, null).status()).isEqualTo(404);
         assertThat(facade.invoke("SecureService", "Ping", "{}", Map.of(), Map.of()).status()).isEqualTo(401);

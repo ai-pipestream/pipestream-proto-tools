@@ -5,6 +5,7 @@ import io.apicurio.registry.client.RegistryClientFactory;
 import io.apicurio.registry.client.common.RegistryClientOptions;
 import io.apicurio.registry.rest.client.RegistryClient;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Singleton;
 import org.eclipse.microprofile.config.ConfigProvider;
@@ -19,8 +20,12 @@ public class ApicurioDescriptorLoaderProducer {
 
     private static final Logger LOG = LoggerFactory.getLogger(ApicurioDescriptorLoaderProducer.class);
 
+    /**
+     * {@code @Dependent} so a {@code null} product is legal when the loader is disabled or
+     * no registry URL is configured; consumers must treat the client as optional.
+     */
     @Produces
-    @Singleton
+    @Dependent
     public RegistryClient produceRegistryClient(ProtoToolsApicurioConfig config) {
         if (!config.enabled()) {
             return null;
@@ -37,15 +42,22 @@ public class ApicurioDescriptorLoaderProducer {
         return RegistryClientFactory.create(options);
     }
 
+    /**
+     * Never returns {@code null} (forbidden for non-{@code @Dependent} producers): when the
+     * loader is disabled or unconfigured, produces an unavailable loader so the extension
+     * degrades gracefully instead of failing injection.
+     */
     @Produces
     @Singleton
     public DescriptorLoader produceApicurioDescriptorLoader(
             RegistryClient client, ProtoToolsApicurioConfig config) {
+        String groupId = config.groupId();
         if (client == null || !config.enabled()) {
-            return null;
+            LOG.warn("Apicurio descriptor loading is disabled or unconfigured; "
+                    + "producing an unavailable loader (group={})", groupId);
+            return new ApicurioDescriptorLoader((RegistryClient) null, groupId);
         }
 
-        String groupId = config.groupId();
         LOG.info("Producing ApicurioDescriptorLoader for group: {}", groupId);
         return new ApicurioDescriptorLoader(client, groupId);
     }

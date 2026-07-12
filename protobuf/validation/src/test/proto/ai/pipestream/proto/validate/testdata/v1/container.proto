@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package ai.pipestream.proto.validate.testdata.v1;
+
+option java_multiple_files = true;
+option java_package = "ai.pipestream.proto.validate.testdata";
+
+import "ai/pipestream/proto/validate/v1/validate.proto";
+
+enum Color {
+  COLOR_UNSPECIFIED = 0;
+  COLOR_RED = 1;
+}
+
+message Item {
+  string name = 1;
+}
+
+message Container {
+  map<string, string> labels = 1;
+  repeated Item items = 2;
+  Color color = 3 [(ai.pipestream.proto.validate.v1.field) = {
+    required: true
+  }];
+}

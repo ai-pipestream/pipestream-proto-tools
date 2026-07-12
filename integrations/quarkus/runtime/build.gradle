@@ -12,6 +12,7 @@ dependencies {
     implementation platform(libs.quarkus.bom)
     api project(':pipestream-proto-tools-mapper-cel')
     api project(':pipestream-proto-tools-rest')
+    api project(':pipestream-proto-tools-server-common')
     api libs.quarkus.arc
 }
 

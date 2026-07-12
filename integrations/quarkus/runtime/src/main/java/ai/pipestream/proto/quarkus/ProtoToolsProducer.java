@@ -11,6 +11,8 @@ import ai.pipestream.proto.mapper.ProtoFieldMapperImpl;
 import ai.pipestream.proto.rest.ProtoApiTokenValidator;
 import ai.pipestream.proto.rest.ProtoRestGateway;
 import ai.pipestream.proto.rest.ProtoRestMethodRegistry;
+import ai.pipestream.proto.server.ProtoToolsServerConfig;
+import io.quarkus.arc.DefaultBean;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Singleton;
@@ -57,6 +59,14 @@ public final class ProtoToolsProducer {
     @Singleton
     public ProtoRestMethodRegistry protoRestMethodRegistry() {
         return new ProtoRestMethodRegistry();
+    }
+
+    /** Default server config; apps override the REST prefix by producing their own bean. */
+    @Produces
+    @DefaultBean
+    @Singleton
+    public ProtoToolsServerConfig protoToolsServerConfig() {
+        return ProtoToolsServerConfig.defaults();
     }
 
     @Produces

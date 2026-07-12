@@ -12,19 +12,28 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Shared HTTP helpers for all server hosts — status mapping, path parse, query/header flatten.
  */
 public final class ProtoRestHttpSupport {
 
+    /** HTTP methods the OpenAPI generator may document via {@code @ProtoRestExposed(httpMethods=...)}. */
+    private static final Set<String> ALLOWED_HTTP_METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE");
+
     private ProtoRestHttpSupport() {
     }
 
     public static boolean isAllowedHttpMethod(String method) {
-        return "POST".equalsIgnoreCase(method)
-                || "PUT".equalsIgnoreCase(method)
-                || "PATCH".equalsIgnoreCase(method);
+        return method != null && ALLOWED_HTTP_METHODS.contains(method.toUpperCase(Locale.ROOT));
+    }
+
+    /**
+     * @return the request body, or {@code "{}"} when absent/blank (GET/DELETE typically carry none)
+     */
+    public static String bodyOrEmptyJson(String body) {
+        return body == null || body.isBlank() ? "{}" : body;
     }
 
     /**
@@ -37,6 +46,9 @@ public final class ProtoRestHttpSupport {
         String remainder = path.substring(restPathPrefix.length());
         if (remainder.startsWith("/")) {
             remainder = remainder.substring(1);
+        } else if (!restPathPrefix.endsWith("/")) {
+            // The prefix must be a whole path segment: /grpc-jsonFoo/Bar is not /grpc-json.
+            return Optional.empty();
         }
         String[] parts = remainder.split("/");
         if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
@@ -81,9 +93,11 @@ public final class ProtoRestHttpSupport {
         if (cause instanceof ServiceNotFoundException || cause instanceof MethodNotFoundException) {
             return 404;
         }
-        if (cause instanceof MalformedProtobufJsonException || cause instanceof ProtobufJsonException) {
+        if (cause instanceof MalformedProtobufJsonException) {
             return 400;
         }
+        // A plain ProtobufJsonException means the server failed to serialize its own
+        // response (or is misconfigured) — a server fault, not a client error.
         if (cause instanceof ProtoRestException) {
             return 500;
         }

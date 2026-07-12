@@ -19,9 +19,12 @@ import java.util.Objects;
  */
 public final class ProtobufJsonTranscoder {
 
-    private final JsonFormat.Printer printer;
-    private final JsonFormat.Parser parser;
     private final DescriptorRegistry descriptorRegistry;
+    /**
+     * Printer/parser pair snapshot; rebuilt when the (lazily loaded) registry grows.
+     * Races are benign: rebuilds are idempotent and readers always see a consistent pair.
+     */
+    private volatile Codecs codecs;
 
     public ProtobufJsonTranscoder() {
         this(null);
@@ -29,20 +32,13 @@ public final class ProtobufJsonTranscoder {
 
     public ProtobufJsonTranscoder(DescriptorRegistry descriptorRegistry) {
         this.descriptorRegistry = descriptorRegistry;
-        JsonFormat.TypeRegistry typeRegistry = buildTypeRegistry(descriptorRegistry);
-        this.printer = JsonFormat.printer()
-                .usingTypeRegistry(typeRegistry)
-                .alwaysPrintFieldsWithNoPresence()
-                .sortingMapKeys();
-        this.parser = JsonFormat.parser()
-                .usingTypeRegistry(typeRegistry)
-                .ignoringUnknownFields();
+        this.codecs = buildCodecs(descriptorRegistry);
     }
 
     public String toJson(Message message) {
         Objects.requireNonNull(message, "message");
         try {
-            return printer.print(message);
+            return currentCodecs().printer().print(message);
         } catch (InvalidProtocolBufferException e) {
             throw new ProtobufJsonException("Failed to serialize protobuf message to JSON", e);
         }
@@ -57,7 +53,7 @@ public final class ProtobufJsonTranscoder {
         Objects.requireNonNull(messageType, "messageType");
         try {
             Message.Builder builder = (Message.Builder) messageType.getMethod("newBuilder").invoke(null);
-            parser.merge(json, builder);
+            currentCodecs().parser().merge(json, builder);
             return (T) builder.build();
         } catch (InvalidProtocolBufferException e) {
             throw new MalformedProtobufJsonException(
@@ -91,7 +87,7 @@ public final class ProtobufJsonTranscoder {
         Objects.requireNonNull(descriptor, "descriptor");
         try {
             DynamicMessage.Builder builder = DynamicMessage.newBuilder(descriptor);
-            parser.merge(json, builder);
+            currentCodecs().parser().merge(json, builder);
             return builder.build();
         } catch (InvalidProtocolBufferException e) {
             throw new MalformedProtobufJsonException(
@@ -103,14 +99,36 @@ public final class ProtobufJsonTranscoder {
         return descriptorRegistry;
     }
 
-    private static JsonFormat.TypeRegistry buildTypeRegistry(DescriptorRegistry registry) {
+    private Codecs currentCodecs() {
+        Codecs current = codecs;
+        if (descriptorRegistry != null && descriptorRegistry.size() != current.descriptorCount()) {
+            current = buildCodecs(descriptorRegistry);
+            codecs = current;
+        }
+        return current;
+    }
+
+    private static Codecs buildCodecs(DescriptorRegistry registry) {
+        int descriptorCount = 0;
         JsonFormat.TypeRegistry.Builder builder = JsonFormat.TypeRegistry.newBuilder();
         if (registry != null) {
             Collection<Descriptor> descriptors = registry.registeredDescriptors();
+            descriptorCount = descriptors.size();
             if (!descriptors.isEmpty()) {
                 builder.add(descriptors);
             }
         }
-        return builder.build();
+        JsonFormat.TypeRegistry typeRegistry = builder.build();
+        JsonFormat.Printer printer = JsonFormat.printer()
+                .usingTypeRegistry(typeRegistry)
+                .alwaysPrintFieldsWithNoPresence()
+                .sortingMapKeys();
+        JsonFormat.Parser parser = JsonFormat.parser()
+                .usingTypeRegistry(typeRegistry)
+                .ignoringUnknownFields();
+        return new Codecs(printer, parser, descriptorCount);
+    }
+
+    private record Codecs(JsonFormat.Printer printer, JsonFormat.Parser parser, int descriptorCount) {
     }
 }

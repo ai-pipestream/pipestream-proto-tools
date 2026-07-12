@@ -27,11 +27,11 @@ public class QuarkusProtoRestFacade {
     private final ProtoToolsServerConfig config;
     private final ProtoOpenApiGenerator openApiGenerator;
 
-    @Inject
     public QuarkusProtoRestFacade(ProtoRestGateway gateway) {
         this(gateway, ProtoToolsServerConfig.defaults());
     }
 
+    @Inject
     public QuarkusProtoRestFacade(ProtoRestGateway gateway, ProtoToolsServerConfig config) {
         this.gateway = gateway;
         this.config = config;
@@ -58,7 +58,12 @@ public class QuarkusProtoRestFacade {
                             e -> e.getKey().toLowerCase(Locale.ROOT),
                             Map.Entry::getValue,
                             (a, b) -> b));
-            String json = gateway.invoke(service, method, body == null ? "" : body, normalized, query == null ? Map.of() : query);
+            String json = gateway.invoke(
+                    service,
+                    method,
+                    ProtoRestHttpSupport.bodyOrEmptyJson(body),
+                    normalized,
+                    query == null ? Map.of() : query);
             return new Result(200, json);
         } catch (Throwable err) {
             return new Result(ProtoRestHttpSupport.statusFor(err), ProtoRestHttpSupport.errorJson(err));

@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class QuarkusProtoRestFacadeTest {
 
     private QuarkusProtoRestFacade facade;
+    private ProtoRestGateway gateway;
 
     @BeforeEach
     void setUp() {
@@ -31,7 +32,7 @@ class QuarkusProtoRestFacadeTest {
                 })
                 .requestType(Struct.class)
                 .build());
-        ProtoRestGateway gateway = new ProtoRestGateway(
+        gateway = new ProtoRestGateway(
                 registry,
                 new ProtobufJsonTranscoder(),
                 ProtoApiTokenValidator.acceptNonBlank());
@@ -51,5 +52,23 @@ class QuarkusProtoRestFacadeTest {
 
         QuarkusProtoRestFacade.Result missing = facade.invoke("Nope", "Echo", null, null, null);
         assertThat(missing.status()).isEqualTo(404);
+
+        QuarkusProtoRestFacade.Result noBody = facade.invoke("EchoService", "Echo", null, Map.of(), Map.of());
+        assertThat(noBody.status()).isEqualTo(200);
+        assertThat(noBody.body()).contains("hello ");
+    }
+
+    @Test
+    void honorsInjectedConfigPrefix() throws Exception {
+        ProtoToolsServerConfig custom = new ProtoToolsServerConfig(
+                "0.0.0.0", 8080, "/custom-json", "/openapi.json", "/health");
+        QuarkusProtoRestFacade customFacade = new QuarkusProtoRestFacade(gateway, custom);
+        assertThat(customFacade.config().restPathPrefix()).isEqualTo("/custom-json");
+        assertThat(customFacade.openApiJson()).contains("/custom-json/EchoService/Echo");
+
+        // CDI must wire the config, not hardcode defaults.
+        assertThat(QuarkusProtoRestFacade.class
+                .getConstructor(ai.pipestream.proto.rest.ProtoRestGateway.class, ProtoToolsServerConfig.class)
+                .isAnnotationPresent(jakarta.inject.Inject.class)).isTrue();
     }
 }

@@ -74,9 +74,11 @@ public final class ProtoValidator {
             List<ValidationResult.Violation> violations) {
         var options = field.getOptions();
         if (!options.hasExtension(ValidateProto.field)) {
-            if (field.getJavaType() == FieldDescriptor.JavaType.MESSAGE && message.hasField(field)) {
+            if (field.getJavaType() == FieldDescriptor.JavaType.MESSAGE
+                    && !field.isRepeated()
+                    && message.hasField(field)) {
                 Object value = message.getField(field);
-                if (value instanceof Message nested && !field.isRepeated()) {
+                if (value instanceof Message nested) {
                     for (FieldDescriptor child : nested.getDescriptorForType().getFields()) {
                         validateField(nested, child, path + "." + child.getName(), violations);
                     }
@@ -290,7 +292,7 @@ public final class ProtoValidator {
             case STRING -> value instanceof String s && !s.isEmpty();
             case BYTE_STRING -> value instanceof com.google.protobuf.ByteString b && !b.isEmpty();
             case MESSAGE -> message.hasField(field);
-            case ENUM -> ((com.google.protobuf.ProtocolMessageEnum) value).getNumber() != 0;
+            case ENUM -> ((com.google.protobuf.Descriptors.EnumValueDescriptor) value).getNumber() != 0;
             case BOOLEAN -> (Boolean) value;
             case INT, LONG -> ((Number) value).longValue() != 0L;
             case FLOAT, DOUBLE -> ((Number) value).doubleValue() != 0.0d;

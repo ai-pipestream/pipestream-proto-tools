@@ -5,6 +5,7 @@ import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Struct;
+import com.google.protobuf.UnknownFieldSet;
 import com.google.protobuf.Value;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -94,6 +95,36 @@ class MessageDiffTest {
         assertThat(MessageDiff.diff(left, right))
                 .extracting(MessageDiff.FieldChange::path)
                 .contains("fields");
+    }
+
+    @Test
+    void mapFieldInsertionOrderDoesNotProduceDiff() {
+        Struct left = Struct.newBuilder()
+                .putFields("a", Value.newBuilder().setStringValue("1").build())
+                .putFields("b", Value.newBuilder().setStringValue("2").build())
+                .build();
+        Struct right = Struct.newBuilder()
+                .putFields("b", Value.newBuilder().setStringValue("2").build())
+                .putFields("a", Value.newBuilder().setStringValue("1").build())
+                .build();
+        assertThat(left).isEqualTo(right);
+        assertThat(MessageDiff.diff(left, right)).isEmpty();
+    }
+
+    @Test
+    void reportsUnknownFieldDifferences() {
+        var withUnknown = DynamicMessage.newBuilder(person)
+                .setField(person.findFieldByName("name"), "Ada")
+                .setUnknownFields(UnknownFieldSet.newBuilder()
+                        .addField(99, UnknownFieldSet.Field.newBuilder().addVarint(7).build())
+                        .build())
+                .build();
+        var without = DynamicMessage.newBuilder(person)
+                .setField(person.findFieldByName("name"), "Ada")
+                .build();
+        assertThat(MessageDiff.diff(without, withUnknown))
+                .extracting(MessageDiff.FieldChange::path)
+                .containsExactly("(unknown fields)");
     }
 
     @Test

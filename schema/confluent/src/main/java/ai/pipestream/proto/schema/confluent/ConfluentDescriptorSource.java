@@ -15,11 +15,14 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Loads a protobuf FileDescriptorSet exposed by a Confluent-compatible endpoint.
+ * Loads a pre-compiled binary protobuf FileDescriptorSet served over plain HTTP or from the
+ * classpath (it does <em>not</em> speak the Schema Registry subjects REST API).
  *
  * <p>Confluent Schema Registry's native protobuf APIs return schema text and
- * references; use an endpoint that supplies a compiled FileDescriptorSet, or a
- * classpath descriptor-set export produced from the registered schema.</p>
+ * references; to load those directly from a registry, use
+ * {@link ConfluentSchemaRegistryLoader}. This source remains the right choice for
+ * endpoints that supply a compiled FileDescriptorSet, or for a classpath
+ * descriptor-set export produced from the registered schema.</p>
  */
 public final class ConfluentDescriptorSource implements DescriptorLoader {
     private final URI endpoint;
@@ -44,8 +47,12 @@ public final class ConfluentDescriptorSource implements DescriptorLoader {
     public List<FileDescriptor> loadDescriptors() throws DescriptorLoadException {
         try {
             return GoogleDescriptorLoader.fromDescriptorSet(FileDescriptorSet.parseFrom(readBytes()));
-        } catch (IOException | InterruptedException e) {
+        } catch (DescriptorLoadException e) {
+            throw e;
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            throw new DescriptorLoadException("Failed to load Confluent descriptor set", e);
+        } catch (IOException e) {
             throw new DescriptorLoadException("Failed to load Confluent descriptor set", e);
         } catch (Exception e) {
             throw new DescriptorLoadException("Invalid Confluent descriptor set", e);

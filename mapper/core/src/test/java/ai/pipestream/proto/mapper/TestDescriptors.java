@@ -31,7 +31,9 @@ final class TestDescriptors {
                     .addField(field("payload", 8, DescriptorProtos.FieldDescriptorProto.Type.TYPE_MESSAGE)
                             .setTypeName(".google.protobuf.Any"))
                     .addField(field("info", 9, DescriptorProtos.FieldDescriptorProto.Type.TYPE_MESSAGE)
-                            .setTypeName(".test.Info")).build();
+                            .setTypeName(".test.Info"))
+                    .addField(field("counts", 10, DescriptorProtos.FieldDescriptorProto.Type.TYPE_INT32)
+                            .setLabel(DescriptorProtos.FieldDescriptorProto.Label.LABEL_REPEATED)).build();
             FILE = FileDescriptor.buildFrom(DescriptorProtos.FileDescriptorProto.newBuilder()
                     .setName("test_document.proto").setPackage("test")
                     .addDependency(Struct.getDescriptor().getFile().getFullName())

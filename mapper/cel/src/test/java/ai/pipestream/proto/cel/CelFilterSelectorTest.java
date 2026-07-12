@@ -53,6 +53,17 @@ class CelFilterSelectorTest {
         assertTrue(mapper.mapFirstCandidate(document, List.of(new CelMappingRule("", "input.nope", "body"), new CelMappingRule("", "'ok'", "body"))));
         assertEquals("ok", document.build().getField(CelFixtures.DOCUMENT.findFieldByName("body")));
     }
+    @Test void invalidFilterThrowsInStrictMap() {
+        var document = CelFixtures.doc("title");
+        assertThrows(CelEvaluationException.class,
+                () -> mapper.map(document, List.of(new CelMappingRule("input.title ==", "'x'", "body"))));
+    }
+    @Test void invalidFilterSkipsCandidateInSoftMode() throws Exception {
+        var document = CelFixtures.doc("title");
+        assertTrue(mapper.mapFirstCandidate(document, List.of(
+                new CelMappingRule("input.title ==", "'x'", "body"), new CelMappingRule("", "'ok'", "body"))));
+        assertEquals("ok", document.build().getField(CelFixtures.DOCUMENT.findFieldByName("body")));
+    }
     @Test void extraBindingIsVisibleToFilters() throws Exception {
         var registry = DescriptorRegistry.create(); registry.registerFile(CelFixtures.FILE);
         var evaluator = new CelEvaluator(CelEnvironmentFactory.builder().addMessageType(CelFixtures.DOCUMENT).addMessageType(Struct.getDescriptor()).addVar("input").addVar("stream").build());

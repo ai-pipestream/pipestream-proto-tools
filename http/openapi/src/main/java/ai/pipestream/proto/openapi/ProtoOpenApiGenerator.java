@@ -163,6 +163,7 @@ public final class ProtoOpenApiGenerator {
         }
         return method.exposed()
                 .map(ProtoRestExposed::httpMethods)
+                .filter(m -> m.length > 0)
                 .orElse(new String[]{"POST"});
     }
 
@@ -187,10 +188,6 @@ public final class ProtoOpenApiGenerator {
     }
 
     private static String ensureSecurityScheme(Map<String, Object> schemes, ApiTokenRequirement token) {
-        String name = DEFAULT_SECURITY_SCHEME;
-        if (schemes.containsKey(name)) {
-            return name;
-        }
         Map<String, Object> scheme = new LinkedHashMap<>();
         if (token.scheme() == ProtoApiToken.Scheme.HTTP) {
             scheme.put("type", "http");
@@ -203,6 +200,15 @@ public final class ProtoOpenApiGenerator {
         if (!token.description().isBlank()) {
             scheme.put("description", token.description());
         }
+        // Each distinct token config gets its own scheme; identical configs share one.
+        for (Map.Entry<String, Object> existing : schemes.entrySet()) {
+            if (existing.getValue().equals(scheme)) {
+                return existing.getKey();
+            }
+        }
+        String name = schemes.isEmpty()
+                ? DEFAULT_SECURITY_SCHEME
+                : DEFAULT_SECURITY_SCHEME + "_" + (schemes.size() + 1);
         schemes.put(name, scheme);
         return name;
     }
@@ -249,7 +255,6 @@ public final class ProtoOpenApiGenerator {
             FieldDescriptor field,
             Map<String, Object> schemas,
             Set<String> visiting) {
-        Map<String, Object> base = scalarOrMessage(field, schemas, visiting);
         if (field.isMapField()) {
             FieldDescriptor value = field.getMessageType().findFieldByName("value");
             Map<String, Object> mapSchema = new LinkedHashMap<>();
@@ -259,6 +264,7 @@ public final class ProtoOpenApiGenerator {
                     : scalarOrMessage(value, schemas, visiting));
             return mapSchema;
         }
+        Map<String, Object> base = scalarOrMessage(field, schemas, visiting);
         if (field.isRepeated()) {
             Map<String, Object> array = new LinkedHashMap<>();
             array.put("type", "array");
@@ -279,13 +285,19 @@ public final class ProtoOpenApiGenerator {
             }
             case ENUM -> enumSchema(field.getEnumType());
             case INT -> Map.of("type", "integer", "format", "int32");
-            case LONG -> Map.of("type", "integer", "format", "int64");
+            // JsonFormat prints 64-bit integers as JSON strings (proto3 JSON spec).
+            case LONG -> Map.of("type", "string", "format", isUnsigned64(field) ? "uint64" : "int64");
             case FLOAT -> Map.of("type", "number", "format", "float");
             case DOUBLE -> Map.of("type", "number", "format", "double");
             case BOOLEAN -> Map.of("type", "boolean");
             case BYTE_STRING -> Map.of("type", "string", "format", "byte");
             case STRING -> Map.of("type", "string");
         };
+    }
+
+    private static boolean isUnsigned64(FieldDescriptor field) {
+        return field.getType() == FieldDescriptor.Type.UINT64
+                || field.getType() == FieldDescriptor.Type.FIXED64;
     }
 
     private static Map<String, Object> enumSchema(EnumDescriptor enumType) {

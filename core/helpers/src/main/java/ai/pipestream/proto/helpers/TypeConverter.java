@@ -6,6 +6,8 @@ import com.google.protobuf.Descriptors.EnumDescriptor;
 import com.google.protobuf.Descriptors.EnumValueDescriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -177,7 +179,9 @@ public class TypeConverter {
         }
 
         return switch (field.getJavaType()) {
-            case INT, LONG, FLOAT, DOUBLE -> Value.newBuilder().setNumberValue(((Number) value).doubleValue()).build();
+            case INT, FLOAT, DOUBLE -> Value.newBuilder().setNumberValue(((Number) value).doubleValue()).build();
+            // int64 encodes as a string per the proto3 JSON convention (doubles lose precision above 2^53)
+            case LONG -> Value.newBuilder().setStringValue(Long.toString(((Number) value).longValue())).build();
             case BOOLEAN -> Value.newBuilder().setBoolValue((Boolean) value).build();
             case STRING -> Value.newBuilder().setStringValue((String) value).build();
             case ENUM -> {
@@ -193,7 +197,9 @@ public class TypeConverter {
             case BYTE_STRING -> {
                 // Encode as base64 string
                 ByteString bytes = (ByteString) value;
-                yield Value.newBuilder().setStringValue(bytes.toStringUtf8()).build();
+                yield Value.newBuilder()
+                        .setStringValue(Base64.getEncoder().encodeToString(bytes.toByteArray()))
+                        .build();
             }
             default -> Value.newBuilder().setNullValue(NullValue.NULL_VALUE).build();
         };
@@ -211,11 +217,51 @@ public class TypeConverter {
             return null;
         }
 
+        if (field.isRepeated()) {
+            List<Value> elements = value.getKindCase() == Value.KindCase.LIST_VALUE
+                    ? value.getListValue().getValuesList()
+                    : List.of(value);
+            List<Object> converted = new ArrayList<>(elements.size());
+            for (Value element : elements) {
+                Object item = singleValueToField(element, field);
+                if (item != null) {
+                    converted.add(item);
+                }
+            }
+            return converted;
+        }
+
+        return singleValueToField(value, field);
+    }
+
+    /**
+     * Converts a single (non-list) protobuf Value to a field element value based on the field descriptor.
+     *
+     * @param value The Value to convert
+     * @param field The target field descriptor
+     * @return The converted value appropriate for the field's element type
+     */
+    private Object singleValueToField(Value value, FieldDescriptor field) {
+        if (value.getKindCase() == Value.KindCase.NULL_VALUE) {
+            return null;
+        }
+
         switch (field.getJavaType()) {
             case INT:
-                return (int) value.getNumberValue();
+                try {
+                    return Math.toIntExact(Math.round(value.getNumberValue()));
+                } catch (ArithmeticException e) {
+                    throw new IllegalArgumentException(
+                            "Value " + value.getNumberValue() + " is out of int32 range for field "
+                                    + field.getFullName(), e);
+                }
             case LONG:
-                return (long) value.getNumberValue();
+                // Accept the string encoding (proto3 JSON convention) and, for backward
+                // compatibility, numbers that are exactly representable as int64.
+                if (value.getKindCase() == Value.KindCase.STRING_VALUE) {
+                    return Long.parseLong(value.getStringValue());
+                }
+                return numberToLong(value.getNumberValue(), field);
             case FLOAT:
                 return (float) value.getNumberValue();
             case DOUBLE:
@@ -236,10 +282,29 @@ public class TypeConverter {
                 }
                 return null;
             case BYTE_STRING:
-                return ByteString.copyFromUtf8(value.getStringValue());
+                // Decode from base64 string (matches the encoding in fieldToValue)
+                return ByteString.copyFrom(Base64.getDecoder().decode(value.getStringValue()));
             default:
                 return null;
         }
+    }
+
+    /**
+     * Converts a JSON number to a long, rejecting values that cannot be represented exactly.
+     *
+     * @param number The number to convert
+     * @param field The target field descriptor (used for error reporting)
+     * @return The exact long value
+     * @throws IllegalArgumentException if the number is non-integral or outside long range
+     */
+    private static long numberToLong(double number, FieldDescriptor field) {
+        long result = (long) number;
+        if ((double) result != number) {
+            throw new IllegalArgumentException(
+                    "Value " + number + " cannot be represented exactly as int64 for field "
+                            + field.getFullName());
+        }
+        return result;
     }
 
     /**

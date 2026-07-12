@@ -62,7 +62,10 @@ public final class IndexingPlanFactory {
             ResolvedFieldHint hint = hints.resolve(field)
                     .orElseGet(() -> InferringIndexingHintSource.infer(field));
             if (hint.type() == IndexFieldKind.UNSPECIFIED) {
-                hint = InferringIndexingHintSource.infer(field);
+                // Merge: take the type from inference but keep the hint's explicit attributes.
+                ResolvedFieldHint inferred = InferringIndexingHintSource.infer(field);
+                hint = new ResolvedFieldHint(
+                        inferred.type(), hint.stored(), hint.indexed(), hint.name(), hint.vectorDims());
             }
             String segment = preservingProtoFieldNames ? field.getName() : field.getJsonName();
             String path = prefix.isEmpty() ? field.getName() : prefix + "." + field.getName();

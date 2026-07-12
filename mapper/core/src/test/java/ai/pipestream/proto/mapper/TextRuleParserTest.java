@@ -19,6 +19,20 @@ class TextRuleParserTest {
     }
 
     @Test
+    void parsesAppendWithoutSurroundingWhitespace() throws Exception {
+        var rule = parser.parse(List.of("tags+=title")).getFirst();
+        assertEquals(TextMappingRule.Operation.APPEND, rule.operation());
+        assertEquals("tags", rule.targetPath());
+        assertEquals("title", rule.sourcePath());
+    }
+
+    @Test
+    void trimsTrailingWhitespaceFromSource() throws Exception {
+        assertEquals("body", parser.parse(List.of("title = body  ")).getFirst().sourcePath());
+        assertEquals("body", parser.parse(List.of("tags += body\t")).getFirst().sourcePath());
+    }
+
+    @Test
     void rejectsGarbage() {
         assertThrows(MappingException.class, () -> parser.parse(List.of("title ~~ body")));
     }

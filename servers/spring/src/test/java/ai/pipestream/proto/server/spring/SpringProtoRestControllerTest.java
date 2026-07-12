@@ -16,8 +16,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class SpringProtoRestControllerTest {
@@ -68,10 +70,28 @@ class SpringProtoRestControllerTest {
 
         String openApi = mockMvc.perform(get("/openapi.json"))
                 .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
         assertThat(openApi).contains("EchoService");
+    }
+
+    @Test
+    void invokesViaGetAndDeleteWithoutBody() throws Exception {
+        String viaGet = mockMvc.perform(get("/grpc-json/EchoService/Echo"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(viaGet).contains("hello ");
+
+        String viaDelete = mockMvc.perform(delete("/grpc-json/EchoService/Echo"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(viaDelete).contains("hello ");
     }
 
     @Test

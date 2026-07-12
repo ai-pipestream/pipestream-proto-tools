@@ -14,6 +14,7 @@ vertx = "5.1.4"
 netty = "4.2.16.Final"
 micronaut = "5.1.5"
 protobuf-gradle = "0.10.0"
+wire = "5.5.1"
 
 [libraries]
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
@@ -44,6 +45,7 @@ netty-codec-http = { module = "io.netty:netty-codec-http", version.ref = "netty"
 netty-transport = { module = "io.netty:netty-transport", version.ref = "netty" }
 micronaut-http-server-netty = { module = "io.micronaut:micronaut-http-server-netty", version.ref = "micronaut" }
 micronaut-inject = { module = "io.micronaut:micronaut-inject", version.ref = "micronaut" }
+wire-schema = { module = "com.squareup.wire:wire-schema", version.ref = "wire" }
 
 [plugins]
 axion-release = { id = "pl.allegro.tech.build.axion-release", version.ref = "axion-release" }

@@ -7,8 +7,10 @@ import ai.pipestream.proto.mapper.ProtoFieldMapper;
 import ai.pipestream.proto.rest.ProtoRestGateway;
 import ai.pipestream.proto.rest.ProtoRestMethod;
 import ai.pipestream.proto.rest.ProtoRestMethodRegistry;
+import ai.pipestream.proto.server.ProtoToolsServerConfig;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import io.quarkus.arc.DefaultBean;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,5 +44,14 @@ class ProtoToolsProducerTest {
                 .requestType(Struct.class)
                 .build());
         assertThat(gateway.invoke("EchoService", "Echo", "{\"name\":\"Ada\"}")).contains("hello Ada");
+    }
+
+    @Test
+    void producesOverridableDefaultServerConfig() throws Exception {
+        ProtoToolsProducer producer = new ProtoToolsProducer();
+        assertThat(producer.protoToolsServerConfig()).isEqualTo(ProtoToolsServerConfig.defaults());
+        // @DefaultBean so an application-provided ProtoToolsServerConfig producer wins.
+        assertThat(ProtoToolsProducer.class.getMethod("protoToolsServerConfig")
+                .isAnnotationPresent(DefaultBean.class)).isTrue();
     }
 }

@@ -2,6 +2,10 @@ package ai.pipestream.proto.metadata;
 
 import ai.pipestream.proto.cel.CelEnvironmentFactory;
 import ai.pipestream.proto.cel.CelEvaluator;
+import com.google.protobuf.DescriptorProtos;
+import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.Descriptors.FileDescriptor;
+import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import org.junit.jupiter.api.Test;
@@ -54,5 +58,54 @@ class MetadataExtractorTest {
 
         assertThat(result).containsEntry("title", "Hello");
         assertThat(result.get("score")).isEqualTo(42.0);
+    }
+
+    @Test
+    void wrapsSingleSelectorFailureInIllegalStateException() {
+        CelEvaluator evaluator = new CelEvaluator(CelEnvironmentFactory.builder()
+                .addMessageType(Struct.getDescriptor()).addVar("input").build());
+        Struct input = Struct.getDefaultInstance();
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> new MetadataExtractor(evaluator).extract(Struct.getDescriptor(), input,
+                        Map.of("title", "input.missing_key")));
+        assertThat(e.getMessage()).contains("input.missing_key");
+    }
+
+    @Test
+    void surfacesSelectorCompileErrorsEagerlyViaDescriptor() {
+        Descriptor descriptor = documentDescriptor();
+        CelEvaluator evaluator = new CelEvaluator();
+        DynamicMessage input = DynamicMessage.getDefaultInstance(descriptor);
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> new MetadataExtractor(evaluator).extract(descriptor, input,
+                        Map.of("bad", "input.no_such_field")));
+        assertThat(e.getMessage()).contains("Invalid metadata selector").contains("input.no_such_field");
+    }
+
+    @Test
+    void typedEnvironmentAcceptsValidSelectorOnDynamicMessage() {
+        Descriptor descriptor = documentDescriptor();
+        CelEvaluator evaluator = new CelEvaluator(CelEnvironmentFactory.builder()
+                .addMessageType(descriptor).addVar("input").build());
+        DynamicMessage input = DynamicMessage.newBuilder(descriptor)
+                .setField(descriptor.findFieldByName("title"), "Hello").build();
+        assertEquals("Hello", new MetadataExtractor(evaluator).extract(descriptor, input,
+                Map.of("title", "input.title")).get("title"));
+    }
+
+    private static Descriptor documentDescriptor() {
+        try {
+            var document = DescriptorProtos.DescriptorProto.newBuilder().setName("Document")
+                    .addField(DescriptorProtos.FieldDescriptorProto.newBuilder()
+                            .setName("title").setNumber(1)
+                            .setType(DescriptorProtos.FieldDescriptorProto.Type.TYPE_STRING))
+                    .build();
+            return FileDescriptor.buildFrom(DescriptorProtos.FileDescriptorProto.newBuilder()
+                            .setName("metadata_fixtures.proto").setPackage("metadatatest")
+                            .addMessageType(document).build(),
+                    new FileDescriptor[]{}).findMessageTypeByName("Document");
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

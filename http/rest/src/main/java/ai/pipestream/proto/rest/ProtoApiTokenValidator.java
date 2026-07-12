@@ -63,7 +63,23 @@ public interface ProtoApiTokenValidator {
         return switch (tokenConfig.in()) {
             case HEADER -> headers.getOrDefault(tokenConfig.name().toLowerCase(), null);
             case QUERY -> queryParams.get(tokenConfig.name());
-            case COOKIE -> headers.getOrDefault("cookie", null);
+            case COOKIE -> cookieValue(headers.get("cookie"), tokenConfig.name());
         };
+    }
+
+    private static String cookieValue(String cookieHeader, String cookieName) {
+        if (cookieHeader == null) {
+            return null;
+        }
+        for (String pair : cookieHeader.split(";")) {
+            int eq = pair.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            if (pair.substring(0, eq).trim().equals(cookieName)) {
+                return pair.substring(eq + 1).trim();
+            }
+        }
+        return null;
     }
 }

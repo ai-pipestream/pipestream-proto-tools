@@ -1,7 +1,9 @@
 package ai.pipestream.proto.json;
 
 import ai.pipestream.proto.descriptors.DescriptorRegistry;
+import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.StringValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,22 @@ class ProtobufJsonTranscoderTest {
                 .isInstanceOf(MalformedProtobufJsonException.class)
                 .extracting(ex -> ((MalformedProtobufJsonException) ex).getJson())
                 .isEqualTo("{not-json");
+    }
+
+    @Test
+    void resolvesAnyTypesRegisteredAfterConstruction() {
+        DescriptorRegistry registry = DescriptorRegistry.create();
+        ProtobufJsonTranscoder transcoder = new ProtobufJsonTranscoder(registry);
+
+        // StringValue is not registered at construction time; the transcoder must pick it up.
+        registry.register(StringValue.getDescriptor());
+        Any packed = Any.pack(StringValue.of("late"));
+
+        String json = transcoder.toJson(packed);
+        assertThat(json).contains("google.protobuf.StringValue").contains("late");
+
+        Any parsed = transcoder.fromJson(json, Any.class);
+        assertThat(parsed.getTypeUrl()).endsWith("google.protobuf.StringValue");
     }
 
     @Test

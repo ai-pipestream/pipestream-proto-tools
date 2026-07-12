@@ -89,9 +89,11 @@ public final class VertxProtoRestServer implements ProtoRestServerHost {
                 ctx.response().putHeader("content-type", "application/json").end(openApiJson()));
 
         String invokePath = config.restPathPrefix() + "/:serviceName/:methodName";
+        router.route(HttpMethod.GET, invokePath).handler(this::handleInvoke);
         router.route(HttpMethod.POST, invokePath).handler(this::handleInvoke);
         router.route(HttpMethod.PUT, invokePath).handler(this::handleInvoke);
         router.route(HttpMethod.PATCH, invokePath).handler(this::handleInvoke);
+        router.route(HttpMethod.DELETE, invokePath).handler(this::handleInvoke);
         return router;
     }
 
@@ -155,13 +157,13 @@ public final class VertxProtoRestServer implements ProtoRestServerHost {
     private void handleInvoke(RoutingContext ctx) {
         String service = ctx.pathParam("serviceName");
         String method = ctx.pathParam("methodName");
-        String body = ctx.body() == null ? "" : ctx.body().asString();
+        String body = ProtoRestHttpSupport.bodyOrEmptyJson(ctx.body() == null ? null : ctx.body().asString());
         Map<String, String> headers = new HashMap<>();
         ctx.request().headers().forEach(e -> headers.put(e.getKey().toLowerCase(Locale.ROOT), e.getValue()));
         Map<String, String> query = new HashMap<>();
         ctx.queryParams().forEach(e -> query.put(e.getKey(), e.getValue()));
 
-        vertx.executeBlocking(() -> gateway.invoke(service, method, body == null ? "" : body, headers, query), false)
+        vertx.executeBlocking(() -> gateway.invoke(service, method, body, headers, query), false)
                 .onSuccess(json -> ctx.response().putHeader("content-type", "application/json").end(json))
                 .onFailure(err -> ctx.response()
                         .setStatusCode(ProtoRestHttpSupport.statusFor(err))

@@ -90,9 +90,10 @@ public final class ProtoNdjsonWriter {
     public void writeBulkIndex(Appendable out, String index, String id, Message document) {
         Objects.requireNonNull(index, "index");
         Objects.requireNonNull(document, "document");
+        String source = objectSourceLine(document);
         try {
             out.append(bulkIndexAction(index, id)).append('\n');
-            writeLine(out, document);
+            out.append(source).append('\n');
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -104,9 +105,10 @@ public final class ProtoNdjsonWriter {
     public void writeBulkCreate(Appendable out, String index, String id, Message document) {
         Objects.requireNonNull(index, "index");
         Objects.requireNonNull(document, "document");
+        String source = objectSourceLine(document);
         try {
             out.append(bulkAction("create", index, id)).append('\n');
-            writeLine(out, document);
+            out.append(source).append('\n');
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -118,6 +120,9 @@ public final class ProtoNdjsonWriter {
     public void writeBulkDelete(Appendable out, String index, String id) {
         Objects.requireNonNull(index, "index");
         Objects.requireNonNull(id, "id");
+        if (id.isBlank()) {
+            throw new IllegalArgumentException("Bulk delete requires a non-blank id");
+        }
         try {
             out.append(bulkAction("delete", index, id)).append('\n');
         } catch (IOException e) {
@@ -127,6 +132,20 @@ public final class ProtoNdjsonWriter {
 
     public String bulkIndexAction(String index, String id) {
         return bulkAction("index", index, id);
+    }
+
+    /**
+     * Serialized source line for a bulk action, rejecting messages (e.g. well-known types
+     * like {@code Timestamp}) that print as a JSON primitive instead of a JSON object.
+     */
+    private String objectSourceLine(Message document) {
+        String json = toJsonLine(document);
+        if (json.isEmpty() || json.charAt(0) != '{') {
+            throw new IllegalArgumentException(
+                    "Bulk _source must be a JSON object, but " + document.getDescriptorForType().getFullName()
+                            + " serializes to the JSON value: " + json);
+        }
+        return json;
     }
 
     private static String bulkAction(String op, String index, String id) {

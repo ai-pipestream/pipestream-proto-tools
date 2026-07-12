@@ -2,4 +2,18 @@ description = 'Confluent schema registry integration'
 
 dependencies {
     api project(':pipestream-proto-tools-descriptors')
+
+    // Confluent Schema Registry subjects API support: JSON responses + .proto text parsing.
+    implementation libs.jackson.databind
+    implementation libs.wire.schema
+}
+
+// Forward integration-test endpoint overrides (see README "Integration tests") to the test JVM.
+tasks.withType(Test).configureEach {
+    ['pipestream.it.apicurio.url', 'pipestream.it.confluent.url'].each { name ->
+        def value = providers.systemProperty(name)
+        if (value.isPresent()) {
+            systemProperty name, value.get()
+        }
+    }
 }

@@ -47,7 +47,12 @@ public final class MicronautProtoRestFacade {
                             e -> e.getKey().toLowerCase(Locale.ROOT),
                             Map.Entry::getValue,
                             (a, b) -> b));
-            String json = gateway.invoke(service, method, body, normalized, query == null ? Map.of() : query);
+            String json = gateway.invoke(
+                    service,
+                    method,
+                    ProtoRestHttpSupport.bodyOrEmptyJson(body),
+                    normalized,
+                    query == null ? Map.of() : query);
             return new Result(200, json);
         } catch (Throwable err) {
             return new Result(ProtoRestHttpSupport.statusFor(err), ProtoRestHttpSupport.errorJson(err));

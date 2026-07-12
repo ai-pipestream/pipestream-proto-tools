@@ -44,7 +44,7 @@ samples/
 | `…-protobuf-validation` | `protobuf/validation` | **Validation standard** — CEL + constraints (no Protovalidate) |
 | `…-protobuf-indexing` | `protobuf/indexing` | **Indexing standard** facade — optional validate → NDJSON |
 | `…-schema-apicurio` | `schema/apicurio` | Apicurio Registry → descriptors |
-| `…-schema-confluent` | `schema/confluent` | Confluent-compatible SR → descriptors |
+| `…-schema-confluent` | `schema/confluent` | Confluent-compatible SR → descriptors (subjects REST API or binary descriptor sets) |
 | `…-index-spi` | `index/spi` | Indexing plans + descriptor **indexing hints** + SPI |
 | `…-index-ndjson` | `index/ndjson` | Message → **NDJSON** (engine-agnostic) |
 | `…-index-lucene` | `index/lucene` | Lucene `Document` plugin |
@@ -371,6 +371,51 @@ buf lint          # or: ./gradlew bufLint / check
 Configured in [`buf.yaml`](buf.yaml) (paths under `protobuf/` and `index/spi`).
 Packages are version-suffixed (`…v1`) and enums use Buf-style prefixes
 (`INDEX_FIELD_TYPE_*`).
+
+## Integration tests
+
+The schema-registry loader modules ship integration tests (JUnit `@Tag("integration")`)
+that run against real registries:
+
+```shell
+docker compose -f docker-compose.integration.yml up -d
+
+./gradlew :pipestream-proto-tools-schema-apicurio:test \
+          :pipestream-proto-tools-schema-confluent:test
+```
+
+They cover Apicurio Registry's native v3 API (`ApicurioDescriptorLoader`) and the
+Confluent subjects API (`ConfluentSchemaRegistryLoader`, including schema
+references and well-known imports) against **both** Apicurio's ccompat facade and
+a real Confluent Schema Registry. When a registry is not reachable (quick ~2s probe) the
+tests **skip** via JUnit assumptions, so a plain `./gradlew build` stays green
+without containers. Test artifacts/subjects use unique per-run names, so reruns
+against a long-lived registry never collide.
+
+Default endpoints match `docker-compose.integration.yml`; override with system
+properties (or the matching environment variables):
+
+| Property | Env variable | Default |
+|---|---|---|
+| `pipestream.it.apicurio.url` | `PIPESTREAM_IT_APICURIO_URL` | `http://localhost:18780` |
+| `pipestream.it.confluent.url` | `PIPESTREAM_IT_CONFLUENT_URL` | `http://localhost:18781` |
+
+```shell
+./gradlew :pipestream-proto-tools-schema-apicurio:test \
+          -Dpipestream.it.apicurio.url=http://my-registry:8080
+```
+
+The `schema/confluent` module ships two loaders: `ConfluentSchemaRegistryLoader`
+speaks the Confluent Schema Registry subjects REST protocol — it lists subjects,
+fetches PROTOBUF schema *text* plus schema references (`{name, subject, version}`,
+resolved recursively with cycle protection; dangling references skip just that
+subject), and compiles everything to runtime `FileDescriptor`s via Square Wire —
+while `ConfluentDescriptorSource` remains the binary path, consuming compiled
+`FileDescriptorSet` payloads over plain HTTP or from the classpath.
+
+Known limitations documented by the tests: `ApicurioDescriptorLoader` does not yet
+resolve registry artifact references (protos importing other registered protos are
+skipped gracefully).
 
 ## Building
 

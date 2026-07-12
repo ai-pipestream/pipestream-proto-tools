@@ -85,9 +85,14 @@ public final class CelProtoMapper {
         Objects.requireNonNull(rule, "rule");
         Map<String, Object> bindings = new LinkedHashMap<>(extraBindings);
         bindings.put(rootVariable, target.build());
-        if (rule.filterExpression() != null && !rule.filterExpression().isBlank()
-                && !evaluator.evaluateBoolean(rule.filterExpression(), bindings)) {
-            return false;
+        if (rule.filterExpression() != null && !rule.filterExpression().isBlank()) {
+            // Soft mode skips the rule on filter compile/evaluation errors; strict mode propagates them.
+            boolean filterMatches = softSelector
+                    ? evaluator.evaluateBoolean(rule.filterExpression(), bindings)
+                    : evaluator.evaluateBooleanOrFail(rule.filterExpression(), bindings);
+            if (!filterMatches) {
+                return false;
+            }
         }
         if (rule.selectorExpression() != null && !rule.selectorExpression().isBlank()) {
             Object value;

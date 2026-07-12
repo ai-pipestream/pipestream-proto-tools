@@ -35,9 +35,8 @@ class ConfluentDescriptorSourceTest {
         assertThat(source.isAvailable()).isFalse();
         assertThatThrownBy(source::loadDescriptors)
                 .isInstanceOf(DescriptorLoader.DescriptorLoadException.class)
-                .hasMessageContaining("Invalid Confluent descriptor set")
-                .cause()
-                .hasMessageContaining("Classpath descriptor set not found");
+                .hasMessageContaining("Classpath descriptor set not found")
+                .hasNoCause();
     }
 
     @Test
@@ -76,9 +75,31 @@ class ConfluentDescriptorSourceTest {
             URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/fds");
             assertThatThrownBy(() -> new ConfluentDescriptorSource(uri).loadDescriptors())
                     .isInstanceOf(DescriptorLoader.DescriptorLoadException.class)
-                    .hasMessageContaining("Invalid Confluent descriptor set")
-                    .cause()
-                    .hasMessageContaining("HTTP 500");
+                    .hasMessageContaining("HTTP 500")
+                    .hasNoCause();
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void ioFailureDoesNotSetInterruptFlag() throws IOException {
+        byte[] truncated = {0x0A, 0x05}; // claims a 5-byte nested message, then EOF
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/fds", exchange -> {
+            exchange.sendResponseHeaders(200, truncated.length);
+            exchange.getResponseBody().write(truncated);
+            exchange.close();
+        });
+        server.start();
+        try {
+            URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/fds");
+            assertThatThrownBy(() -> new ConfluentDescriptorSource(uri).loadDescriptors())
+                    .isInstanceOf(DescriptorLoader.DescriptorLoadException.class)
+                    .hasMessageContaining("Failed to load Confluent descriptor set");
+            assertThat(Thread.interrupted())
+                    .as("IOException must not set the interrupt flag")
+                    .isFalse();
         } finally {
             server.stop(0);
         }

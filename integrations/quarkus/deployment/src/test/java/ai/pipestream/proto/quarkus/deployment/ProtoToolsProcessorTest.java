@@ -1,6 +1,7 @@
 package ai.pipestream.proto.quarkus.deployment;
 
 import ai.pipestream.proto.quarkus.ProtoToolsProducer;
+import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
 import org.junit.jupiter.api.Test;
@@ -17,5 +18,12 @@ class ProtoToolsProcessorTest {
 
         ReflectiveClassBuildItem reflective = processor.registerProducerForReflection();
         assertThat(reflective.getClassNames()).contains(ProtoToolsProducer.class.getName());
+    }
+
+    @Test
+    void registersProducerAsUnremovableBean() {
+        AdditionalBeanBuildItem beans = new ProtoToolsProcessor().registerProducerBean();
+        assertThat(beans.getBeanClasses()).containsExactly(ProtoToolsProducer.class.getName());
+        assertThat(beans.isRemovable()).isFalse();
     }
 }

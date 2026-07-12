@@ -9,6 +9,7 @@ import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -227,7 +228,7 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
     private enum Operation { ASSIGN, APPEND, CLEAR }
 
     private static class RuleParser {
-        private static final Pattern ASSIGN_PATTERN = Pattern.compile("^\\s*([^=\\s]+)\\s*=\\s*(.+)\\s*$");
+        private static final Pattern ASSIGN_PATTERN = Pattern.compile("^\\s*([^=+\\s]+)\\s*=\\s*(.+)\\s*$");
         private static final Pattern APPEND_PATTERN = Pattern.compile("^\\s*([^+\\s]+)\\s*\\+=\\s*(.+)\\s*$");
         private static final Pattern CLEAR_PATTERN = Pattern.compile("^\\s*-\\s*(\\S+)\\s*$");
 
@@ -237,12 +238,12 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                 if (ruleString == null || ruleString.trim().isEmpty()) continue;
                 Matcher assignMatcher = ASSIGN_PATTERN.matcher(ruleString);
                 if (assignMatcher.matches()) {
-                    rules.add(new MappingRule(assignMatcher.group(1), assignMatcher.group(2), Operation.ASSIGN, ruleString));
+                    rules.add(new MappingRule(assignMatcher.group(1), assignMatcher.group(2).trim(), Operation.ASSIGN, ruleString));
                     continue;
                 }
                 Matcher appendMatcher = APPEND_PATTERN.matcher(ruleString);
                 if (appendMatcher.matches()) {
-                    rules.add(new MappingRule(appendMatcher.group(1), appendMatcher.group(2), Operation.APPEND, ruleString));
+                    rules.add(new MappingRule(appendMatcher.group(1), appendMatcher.group(2).trim(), Operation.APPEND, ruleString));
                     continue;
                 }
                 Matcher clearMatcher = CLEAR_PATTERN.matcher(ruleString);
@@ -335,12 +336,14 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                             Object fieldValue = currentMsg.getField(fd);
 
                             // If the final field is an Any and we want to return the unpacked value
-                            if (fieldValue instanceof Any) {
+                            if (isAnyMessage(fieldValue)) {
+                                Any any = toAny(fieldValue, rule);
                                 try {
-                                    return anyHandler.unpack((Any) fieldValue);
+                                    return anyHandler.unpack(any);
                                 } catch (InvalidProtocolBufferException e) {
-                                    // If unpacking fails, return the Any itself
-                                    return fieldValue;
+                                    throw new MappingException("Failed to unpack Any field '" + part
+                                            + "' (type url '" + any.getTypeUrl()
+                                            + "'); register the type's descriptor with the DescriptorRegistry to unpack it", e, rule);
                                 }
                             }
                             return fieldValue;
@@ -354,9 +357,9 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                             Object fieldValue = currentMsg.getField(fd);
 
                             // If field is an Any, unpack it before continuing traversal
-                            if (fieldValue instanceof Any) {
+                            if (isAnyMessage(fieldValue)) {
                                 try {
-                                    current = anyHandler.unpack((Any) fieldValue);
+                                    current = anyHandler.unpack(toAny(fieldValue, rule));
                                 } catch (InvalidProtocolBufferException e) {
                                     throw new MappingException("Failed to unpack Any field '" + part + "' during path traversal", e, rule);
                                 }
@@ -374,7 +377,7 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
         }
 
         public void setValue(Message.Builder root, String path, Object value, String rule) throws MappingException {
-            PathResolutionResult result = resolvePathToFinalContainer(root, path, rule);
+            PathResolutionResult result = resolvePathToFinalContainer(root, path, rule, true);
             String fieldName = result.finalPathPart;
             Message.Builder containerBuilder = (Message.Builder) result.container;
 
@@ -382,22 +385,28 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                 try {
                     // This is the key insight: build the generic message, then parse it back into a concrete Struct to get a proper builder.
                     Struct currentStruct = Struct.parseFrom(containerBuilder.build().toByteString());
-                    Struct.Builder modifiedStructBuilder = currentStruct.toBuilder();
-                    modifiedStructBuilder.putFields(fieldName, wrapValue(value));
-                    containerBuilder.clear().mergeFrom(modifiedStructBuilder.build());
+                    Struct modifiedStruct = putStructKey(currentStruct, result.structKeys, 0, wrapValue(value));
+                    containerBuilder.clear().mergeFrom(modifiedStruct);
                 } catch(InvalidProtocolBufferException e) {
                     throw new MappingException("Failed to rebuild struct for setting value", e, rule);
                 }
             } else {
                 FieldDescriptor fd = findField(containerBuilder.getDescriptorForType(), fieldName, rule);
 
+                // A null value (null literal or unset source field) clears the target field,
+                // mirroring the null semantics already implemented for Struct paths.
+                if (value == null) {
+                    containerBuilder.clearField(fd);
+                    return;
+                }
+
                 // Special handling for Any fields
                 if (fd.getJavaType() == FieldDescriptor.JavaType.MESSAGE &&
                     fd.getMessageType().getFullName().equals(Any.getDescriptor().getFullName())) {
                     // The target field is an Any - pack the value
-                    if (value instanceof Any) {
-                        // Already an Any, use it directly
-                        containerBuilder.setField(fd, value);
+                    if (isAnyMessage(value)) {
+                        // Already an Any (possibly in DynamicMessage form), use it directly
+                        containerBuilder.setField(fd, toAny(value, rule));
                     } else if (value instanceof Message) {
                         // Pack the message into an Any
                         Any packedAny = anyHandler.pack((Message) value);
@@ -414,36 +423,17 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
         }
 
         public void appendValue(Message.Builder root, String path, Object value, String rule) throws MappingException {
-            PathResolutionResult result = resolvePathToFinalContainer(root, path, rule);
+            PathResolutionResult result = resolvePathToFinalContainer(root, path, rule, true);
             if (!(result.container instanceof Message.Builder finalBuilder)) {
                 throw new MappingException("Cannot append to a non-message field", rule);
             }
             // Special handling for google.protobuf.Struct: treat "append" as "append to list value",
             // creating the list if needed.
             if (finalBuilder.getDescriptorForType().getFullName().equals(Struct.getDescriptor().getFullName())) {
-                String fieldName = result.finalPathPart;
                 try {
                     Struct currentStruct = Struct.parseFrom(finalBuilder.build().toByteString());
-                    Struct.Builder modifiedStructBuilder = currentStruct.toBuilder();
-
-                    Value existing = currentStruct.getFieldsMap().get(fieldName);
-                    ListValue.Builder listBuilder;
-                    if (existing != null && existing.getKindCase() == Value.KindCase.LIST_VALUE) {
-                        listBuilder = existing.getListValue().toBuilder();
-                    } else {
-                        listBuilder = ListValue.newBuilder();
-                    }
-
-                    if (value instanceof List<?>) {
-                        for (Object item : (List<?>) value) {
-                            listBuilder.addValues(wrapValue(item));
-                        }
-                    } else {
-                        listBuilder.addValues(wrapValue(value));
-                    }
-
-                    modifiedStructBuilder.putFields(fieldName, Value.newBuilder().setListValue(listBuilder).build());
-                    finalBuilder.clear().mergeFrom(modifiedStructBuilder.build());
+                    Struct modifiedStruct = appendStructKey(currentStruct, result.structKeys, 0, value);
+                    finalBuilder.clear().mergeFrom(modifiedStruct);
                     return;
                 } catch (InvalidProtocolBufferException e) {
                     throw new MappingException("Failed to rebuild struct for appending value", e, rule);
@@ -456,24 +446,27 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                 throw new MappingException("Cannot append: field '" + fd.getName() + "' is not repeated", rule);
             }
 
+            // Convert each appended element to the field's element type, mirroring setValue.
             if (value instanceof List<?>) {
-                for (Object item : (List<?>) value) finalBuilder.addRepeatedField(fd, item);
+                for (Object item : (List<?>) value) finalBuilder.addRepeatedField(fd, typeConverter.convertToFieldType(item, fd));
             } else {
-                finalBuilder.addRepeatedField(fd, value);
+                finalBuilder.addRepeatedField(fd, typeConverter.convertToFieldType(value, fd));
             }
         }
 
         public void clearField(Message.Builder root, String path, String rule) throws MappingException {
-            PathResolutionResult result = resolvePathToFinalContainer(root, path, rule);
+            PathResolutionResult result = resolvePathToFinalContainer(root, path, rule, false);
+            if (result == null) {
+                return; // Clearing through an unset parent is a no-op; do not materialise parents.
+            }
             String fieldName = result.finalPathPart;
             Message.Builder containerBuilder = (Message.Builder) result.container;
 
             if (containerBuilder.getDescriptorForType().getFullName().equals(Struct.getDescriptor().getFullName())) {
                 try {
                     Struct currentStruct = Struct.parseFrom(containerBuilder.build().toByteString());
-                    Struct.Builder modifiedStructBuilder = currentStruct.toBuilder();
-                    modifiedStructBuilder.removeFields(fieldName);
-                    containerBuilder.clear().mergeFrom(modifiedStructBuilder.build());
+                    Struct modifiedStruct = removeStructKey(currentStruct, result.structKeys, 0);
+                    containerBuilder.clear().mergeFrom(modifiedStruct);
                 } catch(InvalidProtocolBufferException e) {
                     throw new MappingException("Failed to rebuild struct for clearing field", e, rule);
                 }
@@ -486,26 +479,67 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
         private static class PathResolutionResult {
             final Object container;
             final String finalPathPart;
-            PathResolutionResult(Object container, String finalPathPart) {
+            /** When the container is a Struct: the chain of struct keys (ending with {@link #finalPathPart}). */
+            final String[] structKeys;
+            PathResolutionResult(Object container, String[] structKeys) {
                 this.container = container;
-                this.finalPathPart = finalPathPart;
+                this.structKeys = structKeys;
+                this.finalPathPart = structKeys[structKeys.length - 1];
             }
         }
 
-        private PathResolutionResult resolvePathToFinalContainer(Message.Builder root, String path, String rule) throws MappingException {
+        /**
+         * Walks the parent segments of {@code path}, returning the builder that owns the final segment.
+         * Once traversal reaches a {@code google.protobuf.Struct} field, the remaining segments are
+         * Struct keys and are returned for the caller to resolve, mirroring the read-path semantics.
+         *
+         * @param materializeParents when {@code true}, unset intermediate parents are created;
+         *        when {@code false} (clear operations), an unset parent returns {@code null}
+         *        so the caller can treat the operation as a no-op.
+         */
+        private PathResolutionResult resolvePathToFinalContainer(Message.Builder root, String path, String rule, boolean materializeParents) throws MappingException {
             String[] parts = path.split(PATH_SEPARATOR_REGEX);
             Message.Builder currentBuilder = root;
 
             for (int i = 0; i < parts.length - 1; i++) {
                 String part = parts[i];
+                if (currentBuilder.getDescriptorForType().getFullName().equals(Struct.getDescriptor().getFullName())) {
+                    return new PathResolutionResult(currentBuilder, Arrays.copyOfRange(parts, i, parts.length));
+                }
                 FieldDescriptor fd = findField(currentBuilder.getDescriptorForType(), part, rule);
 
                 if (fd.isRepeated() || fd.getJavaType() != FieldDescriptor.JavaType.MESSAGE) {
                     throw new MappingException("Path '" + path + "' attempts to traverse through non-singular message field '" + part + "'", rule);
                 }
+                if (!materializeParents && !currentBuilder.hasField(fd)) {
+                    return null;
+                }
                 currentBuilder = currentBuilder.getFieldBuilder(fd);
             }
-            return new PathResolutionResult(currentBuilder, parts[parts.length - 1]);
+            return new PathResolutionResult(currentBuilder, new String[]{parts[parts.length - 1]});
+        }
+
+        /**
+         * Detects google.protobuf.Any values by descriptor full name, so that DynamicMessage
+         * instances of Any (e.g. from DynamicMessage.parseFrom) are recognised alongside
+         * concrete {@link Any} objects.
+         */
+        private static boolean isAnyMessage(Object value) {
+            return value instanceof MessageOrBuilder messageOrBuilder
+                    && messageOrBuilder.getDescriptorForType().getFullName().equals(Any.getDescriptor().getFullName());
+        }
+
+        /** Converts a value recognised by {@link #isAnyMessage(Object)} into a concrete {@link Any}. */
+        private static Any toAny(Object value, String rule) throws MappingException {
+            if (value instanceof Any any) {
+                return any;
+            }
+            Message message = value instanceof Message.Builder builder ? builder.build() : (Message) value;
+            try {
+                return Any.parseFrom(message.toByteString());
+            } catch (InvalidProtocolBufferException e) {
+                throw new MappingException("Failed to convert dynamic google.protobuf.Any message", e, rule);
+            }
         }
 
         private FieldDescriptor findField(Descriptor d, String name, String fullPath) throws MappingException {
@@ -514,6 +548,73 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                 throw new MappingException("Field '" + name + "' not found in message '" + d.getName() + "'", fullPath);
             }
             return fd;
+        }
+
+        /** Sets {@code leaf} at the nested Struct key chain, creating intermediate structs as needed. */
+        private Struct putStructKey(Struct struct, String[] keys, int index, Value leaf) {
+            Struct.Builder builder = struct.toBuilder();
+            String key = keys[index];
+            if (index == keys.length - 1) {
+                builder.putFields(key, leaf);
+            } else {
+                builder.putFields(key, Value.newBuilder()
+                        .setStructValue(putStructKey(childStruct(struct, key), keys, index + 1, leaf)).build());
+            }
+            return builder.build();
+        }
+
+        /** Appends {@code value} to the list at the nested Struct key chain, preserving an existing scalar. */
+        private Struct appendStructKey(Struct struct, String[] keys, int index, Object value) {
+            Struct.Builder builder = struct.toBuilder();
+            String key = keys[index];
+            if (index == keys.length - 1) {
+                Value existing = struct.getFieldsMap().get(key);
+                ListValue.Builder listBuilder;
+                if (existing != null && existing.getKindCase() == Value.KindCase.LIST_VALUE) {
+                    listBuilder = existing.getListValue().toBuilder();
+                } else {
+                    listBuilder = ListValue.newBuilder();
+                    // An existing non-list value becomes the first element rather than being discarded.
+                    if (existing != null && existing.getKindCase() != Value.KindCase.NULL_VALUE
+                            && existing.getKindCase() != Value.KindCase.KIND_NOT_SET) {
+                        listBuilder.addValues(existing);
+                    }
+                }
+                if (value instanceof List<?>) {
+                    for (Object item : (List<?>) value) listBuilder.addValues(wrapValue(item));
+                } else {
+                    listBuilder.addValues(wrapValue(value));
+                }
+                builder.putFields(key, Value.newBuilder().setListValue(listBuilder).build());
+            } else {
+                builder.putFields(key, Value.newBuilder()
+                        .setStructValue(appendStructKey(childStruct(struct, key), keys, index + 1, value)).build());
+            }
+            return builder.build();
+        }
+
+        /** Removes the nested Struct key; a missing or non-struct intermediate key makes this a no-op. */
+        private Struct removeStructKey(Struct struct, String[] keys, int index) {
+            Struct.Builder builder = struct.toBuilder();
+            String key = keys[index];
+            if (index == keys.length - 1) {
+                builder.removeFields(key);
+                return builder.build();
+            }
+            Value existing = struct.getFieldsMap().get(key);
+            if (existing == null || existing.getKindCase() != Value.KindCase.STRUCT_VALUE) {
+                return struct;
+            }
+            builder.putFields(key, Value.newBuilder()
+                    .setStructValue(removeStructKey(existing.getStructValue(), keys, index + 1)).build());
+            return builder.build();
+        }
+
+        /** Existing struct value at {@code key}, or an empty struct when absent or not a struct. */
+        private static Struct childStruct(Struct struct, String key) {
+            Value existing = struct.getFieldsMap().get(key);
+            return existing != null && existing.getKindCase() == Value.KindCase.STRUCT_VALUE
+                    ? existing.getStructValue() : Struct.getDefaultInstance();
         }
 
         private Value wrapValue(Object value) {

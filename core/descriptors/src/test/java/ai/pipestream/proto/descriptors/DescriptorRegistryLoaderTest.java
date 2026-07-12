@@ -3,7 +3,12 @@ package ai.pipestream.proto.descriptors;
 import ai.pipestream.proto.descriptors.DescriptorLoader;
 import ai.pipestream.proto.descriptors.DescriptorRegistry;
 import ai.pipestream.proto.descriptors.GoogleDescriptorLoader;
+import com.google.protobuf.DescriptorProtos;
+import com.google.protobuf.Descriptors.DescriptorValidationException;
+import com.google.protobuf.Descriptors.FileDescriptor;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -107,6 +112,70 @@ public class DescriptorRegistryLoaderTest {
 
         // Should not throw
         registry.autoLoadDescriptors();
+    }
+
+    @Test
+    void testResolveOnDemandReturnsNullWhenLoadedFileLacksType() throws Exception {
+        DescriptorRegistry registry = new DescriptorRegistry();
+        FileDescriptor unrelatedFile = createFileDescriptor("unrelated.proto", "test.pkg", "Unrelated");
+        registry.addLoader(new StubLoader(unrelatedFile));
+
+        // Loader returns a file that does not contain the requested type;
+        // this must return null instead of recursing forever (StackOverflowError).
+        assertNull(registry.findDescriptorByFullName("com.example.Missing"));
+
+        // The unrelated file's types should still have been registered.
+        assertNotNull(registry.findDescriptorByFullName("test.pkg.Unrelated"));
+    }
+
+    @Test
+    void testLoaderAddedAfterSimpleNameMissIsStillAutoLoaded() throws Exception {
+        DescriptorRegistry registry = new DescriptorRegistry();
+
+        // Miss with zero loaders — this must not permanently latch auto-loading off.
+        assertNull(registry.findDescriptorBySimpleName("LateType"));
+
+        FileDescriptor lateFile = createFileDescriptor("late.proto", "test.pkg", "LateType");
+        registry.addLoader(new StubLoader(lateFile));
+
+        assertNotNull(registry.findDescriptorBySimpleName("LateType"));
+    }
+
+    private static FileDescriptor createFileDescriptor(String fileName, String packageName, String messageName)
+            throws DescriptorValidationException {
+        DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()
+                .setName(fileName)
+                .setPackage(packageName)
+                .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
+                        .setName(messageName)
+                        .addField(DescriptorProtos.FieldDescriptorProto.newBuilder()
+                                .setName("id").setNumber(1)
+                                .setType(DescriptorProtos.FieldDescriptorProto.Type.TYPE_STRING)))
+                .build();
+        return FileDescriptor.buildFrom(fileProto, new FileDescriptor[]{});
+    }
+
+    private record StubLoader(FileDescriptor fileDescriptor) implements DescriptorLoader {
+
+        @Override
+        public List<FileDescriptor> loadDescriptors() {
+            return List.of(fileDescriptor);
+        }
+
+        @Override
+        public FileDescriptor loadDescriptor(String fileName) {
+            return fileDescriptor;
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return true;
+        }
+
+        @Override
+        public String getLoaderType() {
+            return "stub";
+        }
     }
 
     @Test

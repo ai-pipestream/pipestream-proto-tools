@@ -24,17 +24,18 @@ public final class ProtoOptionsIndexingHintSource implements IndexingHintSource 
         if (!options.hasExtension(IndexingHintsProto.index)) {
             return Optional.empty();
         }
-        return Optional.of(toResolved(options.getExtension(IndexingHintsProto.index)));
+        return Optional.of(toResolved(options.getExtension(IndexingHintsProto.index), field));
     }
 
-    static ResolvedFieldHint toResolved(FieldIndexHint hint) {
+    static ResolvedFieldHint toResolved(FieldIndexHint hint, FieldDescriptor field) {
         IndexFieldKind kind = toKind(hint.getType());
+        // Type left unset → infer it from the descriptor; explicitly-set name/stored/indexed still win.
         ResolvedFieldHint defaults = kind == IndexFieldKind.UNSPECIFIED
-                ? ResolvedFieldHint.of(IndexFieldKind.TEXT)
+                ? InferringIndexingHintSource.infer(field)
                 : ResolvedFieldHint.of(kind);
         boolean stored = hint.hasStored() ? hint.getStored() : defaults.stored();
         boolean indexed = hint.hasIndexed() ? hint.getIndexed() : defaults.indexed();
-        return new ResolvedFieldHint(kind, stored, indexed, hint.getName(), hint.getVectorDims());
+        return new ResolvedFieldHint(defaults.type(), stored, indexed, hint.getName(), hint.getVectorDims());
     }
 
     private static IndexFieldKind toKind(IndexFieldType type) {

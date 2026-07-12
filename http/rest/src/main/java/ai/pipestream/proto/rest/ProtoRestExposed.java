@@ -18,8 +18,12 @@ public @interface ProtoRestExposed {
     /** Optional path override; empty = derive from service/method names. */
     String path() default "";
 
-    /** HTTP methods allowed (default POST, matching Micronaut grpc-json). */
-    String[] httpMethods() default {"POST"};
+    /**
+     * HTTP methods allowed. Empty (the default) inherits from a type-level
+     * {@code @ProtoRestExposed}; if neither level sets any, POST is used
+     * (matching Micronaut grpc-json).
+     */
+    String[] httpMethods() default {};
 
     /** Human-readable summary for OpenAPI. */
     String summary() default "";

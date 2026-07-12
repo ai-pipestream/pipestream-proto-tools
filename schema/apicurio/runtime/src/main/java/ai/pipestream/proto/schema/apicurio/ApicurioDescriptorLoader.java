@@ -4,6 +4,7 @@ import ai.pipestream.proto.descriptors.DescriptorLoader;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import io.apicurio.registry.resolver.SchemaParser;
 import io.apicurio.registry.rest.client.RegistryClient;
+import io.apicurio.registry.rest.client.models.ArtifactReference;
 import io.apicurio.registry.rest.client.models.ArtifactSearchResults;
 import io.apicurio.registry.rest.client.models.SearchedArtifact;
 import io.apicurio.registry.serde.protobuf.ProtobufSchemaParser;
@@ -11,14 +12,20 @@ import io.apicurio.registry.utils.protobuf.schema.ProtobufSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Loads Protocol Buffer descriptors from Apicurio Schema Registry v3.
+ *
+ * <p>Artifacts whose .proto imports other registered artifacts are supported when the import
+ * is recorded as a first-class registry reference: references are resolved recursively (see
+ * {@link ApicurioReferenceResolver}) before parsing. An artifact with an unresolvable
+ * (dangling) reference is skipped with a warning naming the unresolved import, never failing
+ * the whole bulk load.</p>
  *
  * <p>Lifted from {@code pipestream-platform}'s descriptor-apicurio extension and
  * kept usable as plain Java (no CDI required) via constructors / {@link Builder}.
@@ -30,12 +37,14 @@ public class ApicurioDescriptorLoader implements DescriptorLoader {
     private final RegistryClient client;
     private final String groupId;
     private final SchemaParser<ProtobufSchema, ?> schemaParser;
+    private final ApicurioReferenceResolver referenceResolver;
     private final ConcurrentHashMap<String, FileDescriptor> cache = new ConcurrentHashMap<>();
 
     public ApicurioDescriptorLoader(RegistryClient client, String groupId) {
         this.client = client;
         this.groupId = Objects.requireNonNull(groupId, "groupId");
         this.schemaParser = new ProtobufSchemaParser<>();
+        this.referenceResolver = new ApicurioReferenceResolver(new ClientArtifactSource(), schemaParser);
     }
 
     /**
@@ -147,15 +156,39 @@ public class ApicurioDescriptorLoader implements DescriptorLoader {
     }
 
     private FileDescriptor fetchAndParse(String gid, String aid) throws Exception {
-        var inputStream = client.groups().byGroupId(gid).artifacts().byArtifactId(aid)
-                .versions().byVersionExpression("branch=latest").content().get();
-        if (inputStream == null) {
-            throw new Exception("Artifact content not found");
+        ProtobufSchema parsed = referenceResolver.resolveAndParse(
+                gid, aid, ApicurioReferenceResolver.LATEST_VERSION_EXPRESSION);
+        return parsed.getFileDescriptor();
+    }
+
+    /** {@link ApicurioReferenceResolver.ArtifactSource} backed by the registry SDK client. */
+    private final class ClientArtifactSource implements ApicurioReferenceResolver.ArtifactSource {
+
+        @Override
+        public byte[] content(String gid, String aid, String versionExpression) throws Exception {
+            InputStream inputStream = client.groups().byGroupId(gid).artifacts().byArtifactId(aid)
+                    .versions().byVersionExpression(versionExpression).content().get();
+            if (inputStream == null) {
+                return null;
+            }
+            try (inputStream) {
+                return inputStream.readAllBytes();
+            }
         }
-        try (inputStream) {
-            byte[] bytes = inputStream.readAllBytes();
-            ProtobufSchema parsed = schemaParser.parseSchema(bytes, Collections.emptyMap());
-            return parsed.getFileDescriptor();
+
+        @Override
+        public List<ApicurioReferenceResolver.Reference> references(
+                String gid, String aid, String versionExpression) {
+            List<ArtifactReference> references = client.groups().byGroupId(gid)
+                    .artifacts().byArtifactId(aid)
+                    .versions().byVersionExpression(versionExpression).references().get();
+            if (references == null) {
+                return List.of();
+            }
+            return references.stream()
+                    .map(ref -> new ApicurioReferenceResolver.Reference(
+                            ref.getName(), ref.getGroupId(), ref.getArtifactId(), ref.getVersion()))
+                    .toList();
         }
     }
 

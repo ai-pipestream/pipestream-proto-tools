@@ -25,3 +25,11 @@ dependencies {
 tasks.matching { it.name == 'validateExtension' }.configureEach {
     enabled = false
 }
+
+// Forward integration-test endpoint overrides (see README "Integration tests") to the test JVM.
+tasks.withType(Test).configureEach {
+    def apicurioUrl = providers.systemProperty('pipestream.it.apicurio.url')
+    if (apicurioUrl.isPresent()) {
+        systemProperty 'pipestream.it.apicurio.url', apicurioUrl.get()
+    }
+}

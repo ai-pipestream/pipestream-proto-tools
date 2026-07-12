@@ -58,6 +58,11 @@ subprojects {
             maxParallelForks = Math.max(1, Runtime.runtime.availableProcessors().intdiv(2))
         }
 
+        // Generated protobuf sources have no javadoc tags; keep doclint useful but quiet.
+        tasks.withType(Javadoc).configureEach {
+            options.addStringOption('Xdoclint:all,-missing', '-quiet')
+        }
+
         if (project.name != 'samples') {
             dependencies {
                 testImplementation platform(libs.junit.bom)

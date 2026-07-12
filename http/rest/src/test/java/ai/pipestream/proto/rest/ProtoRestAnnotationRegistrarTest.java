@@ -26,6 +26,26 @@ class ProtoRestAnnotationRegistrarTest {
         }
     }
 
+    @ProtoRestExposed(httpMethods = {"PUT"})
+    static final class UpdateService {
+        @ProtoRestExposed
+        public Struct update(Struct request) {
+            return request;
+        }
+
+        @ProtoRestExposed(httpMethods = {"PATCH"})
+        public Struct patch(Struct request) {
+            return request;
+        }
+    }
+
+    static final class PlainService {
+        @ProtoRestExposed
+        public Struct go(Struct request) {
+            return request;
+        }
+    }
+
     @Test
     void registersAnnotatedMethodsOnly() {
         ProtoRestMethodRegistry registry = new ProtoRestMethodRegistry();
@@ -41,5 +61,20 @@ class ProtoRestAnnotationRegistrarTest {
 
         assertThat(registry.find("Echo", "echo")).isPresent();
         assertThat(registry.find("Echo", "ignored")).isEmpty();
+    }
+
+    @Test
+    void inheritsTypeLevelHttpMethodsUnlessMethodOverrides() {
+        ProtoRestMethodRegistry registry = new ProtoRestMethodRegistry();
+        ProtoRestAnnotationRegistrar registrar = new ProtoRestAnnotationRegistrar(registry);
+        registrar.register(new UpdateService());
+        registrar.register(new PlainService());
+
+        assertThat(registry.find("Update", "update").orElseThrow().httpMethods())
+                .containsExactly("PUT");
+        assertThat(registry.find("Update", "patch").orElseThrow().httpMethods())
+                .containsExactly("PATCH");
+        assertThat(registry.find("Plain", "go").orElseThrow().httpMethods())
+                .containsExactly("POST");
     }
 }

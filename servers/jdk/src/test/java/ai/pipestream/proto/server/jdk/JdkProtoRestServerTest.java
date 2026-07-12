@@ -75,6 +75,37 @@ class JdkProtoRestServerTest {
         assertThat(ok.body()).contains("hello jdk");
     }
 
+    @Test
+    void getAndDeleteInvokeWithEmptyJsonBody() throws Exception {
+        HttpResponse<String> viaGet = client.send(
+                HttpRequest.newBuilder(uri("/grpc-json/EchoService/Echo"))
+                        .header("api_token", "secret")
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(viaGet.statusCode()).isEqualTo(200);
+        assertThat(viaGet.body()).contains("hello ");
+
+        HttpResponse<String> viaDelete = client.send(
+                HttpRequest.newBuilder(uri("/grpc-json/EchoService/Echo"))
+                        .header("api_token", "secret")
+                        .DELETE()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(viaDelete.statusCode()).isEqualTo(200);
+        assertThat(viaDelete.body()).contains("hello ");
+    }
+
+    @Test
+    void undocumentedMethodStill405s() throws Exception {
+        HttpResponse<String> options = client.send(
+                HttpRequest.newBuilder(uri("/grpc-json/EchoService/Echo"))
+                        .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(options.statusCode()).isEqualTo(405);
+    }
+
     private HttpResponse<String> get(String path) throws Exception {
         return client.send(HttpRequest.newBuilder(uri(path)).GET().build(), HttpResponse.BodyHandlers.ofString());
     }

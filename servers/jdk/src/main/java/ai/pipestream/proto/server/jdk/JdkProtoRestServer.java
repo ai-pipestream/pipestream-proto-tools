@@ -138,7 +138,7 @@ public final class JdkProtoRestServer implements ProtoRestServerHost {
             return;
         }
         String[] parts = route.get();
-        String body = readBody(exchange);
+        String body = ProtoRestHttpSupport.bodyOrEmptyJson(readBody(exchange));
         Map<String, String> headers = flattenHeaders(exchange.getRequestHeaders());
         Map<String, String> query = ProtoRestHttpSupport.parseQuery(exchange.getRequestURI().getRawQuery());
         try {

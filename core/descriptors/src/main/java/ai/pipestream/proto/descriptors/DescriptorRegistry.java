@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Registry for managing Protocol Buffer descriptors.
@@ -23,9 +24,9 @@ public class DescriptorRegistry {
 
     private final Map<String, Descriptor> descriptorsByFullName = new ConcurrentHashMap<>();
     private final Map<String, Descriptor> descriptorsBySimpleName = new ConcurrentHashMap<>();
-    private final List<DescriptorLoader> manualLoaders = new ArrayList<>();
+    private final List<DescriptorLoader> manualLoaders = new CopyOnWriteArrayList<>();
 
-    private boolean autoLoadAttempted = false;
+    private volatile boolean autoLoadAttempted = false;
 
     /**
      * Creates a new DescriptorRegistry and registers well-known types.
@@ -151,7 +152,12 @@ public class DescriptorRegistry {
                     FileDescriptor fd = loader.loadDescriptor(typeName);
                     if (fd != null) {
                         registerFile(fd);
-                        return findDescriptorByFullName(typeName);
+                        // Look up directly (non-recursive): re-entering resolution for the same
+                        // name would loop forever when the loaded file lacks the requested type.
+                        Descriptor resolved = descriptorsByFullName.get(typeName);
+                        if (resolved != null) {
+                            return resolved;
+                        }
                     }
                 } catch (DescriptorLoader.DescriptorLoadException e) {
                     // Ignore and try next loader
@@ -242,6 +248,8 @@ public class DescriptorRegistry {
     public void addLoader(DescriptorLoader loader) {
         if (loader != null) {
             manualLoaders.add(loader);
+            // Allow the next auto-load to pick up the new loader.
+            autoLoadAttempted = false;
         }
     }
 

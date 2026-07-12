@@ -1,6 +1,7 @@
 package ai.pipestream.proto.server;
 
 import ai.pipestream.proto.json.MalformedProtobufJsonException;
+import ai.pipestream.proto.json.ProtobufJsonException;
 import ai.pipestream.proto.rest.MethodNotFoundException;
 import ai.pipestream.proto.rest.ServiceNotFoundException;
 import ai.pipestream.proto.rest.UnauthorizedProtoRestException;
@@ -14,11 +15,24 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ProtoRestHttpSupportTest {
 
     @Test
-    void allowsMutatingHttpMethodsOnly() {
+    void allowsDocumentedHttpMethods() {
         assertThat(ProtoRestHttpSupport.isAllowedHttpMethod("POST")).isTrue();
         assertThat(ProtoRestHttpSupport.isAllowedHttpMethod("put")).isTrue();
         assertThat(ProtoRestHttpSupport.isAllowedHttpMethod("PATCH")).isTrue();
-        assertThat(ProtoRestHttpSupport.isAllowedHttpMethod("GET")).isFalse();
+        // The OpenAPI generator honors @ProtoRestExposed(httpMethods={"GET","DELETE"}).
+        assertThat(ProtoRestHttpSupport.isAllowedHttpMethod("GET")).isTrue();
+        assertThat(ProtoRestHttpSupport.isAllowedHttpMethod("delete")).isTrue();
+        assertThat(ProtoRestHttpSupport.isAllowedHttpMethod("OPTIONS")).isFalse();
+        assertThat(ProtoRestHttpSupport.isAllowedHttpMethod("HEAD")).isFalse();
+        assertThat(ProtoRestHttpSupport.isAllowedHttpMethod(null)).isFalse();
+    }
+
+    @Test
+    void bodyOrEmptyJsonDefaultsMissingBodies() {
+        assertThat(ProtoRestHttpSupport.bodyOrEmptyJson(null)).isEqualTo("{}");
+        assertThat(ProtoRestHttpSupport.bodyOrEmptyJson("")).isEqualTo("{}");
+        assertThat(ProtoRestHttpSupport.bodyOrEmptyJson("  ")).isEqualTo("{}");
+        assertThat(ProtoRestHttpSupport.bodyOrEmptyJson("{\"a\":1}")).isEqualTo("{\"a\":1}");
     }
 
     @Test
@@ -27,6 +41,14 @@ class ProtoRestHttpSupportTest {
                 .contains(new String[] {"Echo", "ping"});
         assertThat(ProtoRestHttpSupport.parseServiceMethod("/other/Echo/ping", "/grpc-json")).isEmpty();
         assertThat(ProtoRestHttpSupport.parseServiceMethod("/grpc-json/Echo", "/grpc-json")).isEmpty();
+    }
+
+    @Test
+    void requiresSegmentBoundaryAfterPrefix() {
+        assertThat(ProtoRestHttpSupport.parseServiceMethod("/grpc-jsonFoo/Bar", "/grpc-json")).isEmpty();
+        assertThat(ProtoRestHttpSupport.parseServiceMethod("/grpc-json-v2/Echo/ping", "/grpc-json")).isEmpty();
+        assertThat(ProtoRestHttpSupport.parseServiceMethod("/grpc-json/Echo/ping", "/grpc-json/"))
+                .contains(new String[] {"Echo", "ping"});
     }
 
     @Test
@@ -52,6 +74,17 @@ class ProtoRestHttpSupportTest {
         assertThat(ProtoRestHttpSupport.statusFor(new MethodNotFoundException("Echo", "m"))).isEqualTo(404);
         assertThat(ProtoRestHttpSupport.statusFor(new MalformedProtobufJsonException("bad", "{}"))).isEqualTo(400);
         assertThat(ProtoRestHttpSupport.statusFor(new RuntimeException("x"))).isEqualTo(500);
+    }
+
+    @Test
+    void responseSerializationFailureIsServerError() {
+        // Plain ProtobufJsonException means the server failed to serialize its own response.
+        assertThat(ProtoRestHttpSupport.statusFor(
+                new ProtobufJsonException("Failed to serialize protobuf message to JSON")))
+                .isEqualTo(500);
+        assertThat(ProtoRestHttpSupport.errorJson(
+                new ProtobufJsonException("Failed to serialize protobuf message to JSON")))
+                .contains("\"status\":500");
     }
 
     @Test

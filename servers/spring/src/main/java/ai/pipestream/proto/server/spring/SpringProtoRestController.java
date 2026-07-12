@@ -44,20 +44,23 @@ public class SpringProtoRestController {
         return Map.of("status", "UP");
     }
 
-    @GetMapping("${pipestream.proto.rest.openapi-path:/openapi.json}")
+    @GetMapping(
+            value = "${pipestream.proto.rest.openapi-path:/openapi.json}",
+            produces = MediaType.APPLICATION_JSON_VALUE)
     public String openApi() {
         return openApiGenerator.generateJson(gateway.getRegistry());
     }
 
     @RequestMapping(
             path = "${pipestream.proto.rest.path-prefix:/grpc-json}/{serviceName}/{methodName}",
-            method = {RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH},
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH,
+                    RequestMethod.DELETE},
             consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> invoke(
             @PathVariable("serviceName") String serviceName,
             @PathVariable("methodName") String methodName,
-            @RequestBody String body,
+            @RequestBody(required = false) String body,
             @RequestHeader Map<String, String> headers,
             @RequestParam Map<String, String> query) {
         try {
@@ -66,7 +69,8 @@ public class SpringProtoRestController {
                             e -> e.getKey().toLowerCase(Locale.ROOT),
                             Map.Entry::getValue,
                             (a, b) -> b));
-            String json = gateway.invoke(serviceName, methodName, body, normalized, query);
+            String json = gateway.invoke(
+                    serviceName, methodName, ProtoRestHttpSupport.bodyOrEmptyJson(body), normalized, query);
             return ResponseEntity.ok(json);
         } catch (Throwable err) {
             return ResponseEntity.status(ProtoRestHttpSupport.statusFor(err))

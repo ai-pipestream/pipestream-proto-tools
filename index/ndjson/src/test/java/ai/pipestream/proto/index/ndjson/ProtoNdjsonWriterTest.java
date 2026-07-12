@@ -12,6 +12,7 @@ import com.google.protobuf.Value;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ProtoNdjsonWriterTest {
 
@@ -65,14 +66,35 @@ class ProtoNdjsonWriterTest {
 
     @Test
     void writesOpenSearchBulkIndexPair() {
-        // Timestamp becomes an RFC3339 JSON string via JsonFormat.
-        Timestamp ts = Timestamp.newBuilder().setSeconds(1_700_000_000L).build();
+        Struct doc = Struct.newBuilder()
+                .putFields("title", Value.newBuilder().setStringValue("Hello").build())
+                .build();
         StringBuilder out = new StringBuilder();
-        writer.writeBulkIndex(out, "docs", "id-1", ts);
+        writer.writeBulkIndex(out, "docs", "id-1", doc);
 
         String[] lines = out.toString().split("\n", -1);
         assertThat(lines[0]).isEqualTo("{\"index\":{\"_index\":\"docs\",\"_id\":\"id-1\"}}");
-        assertThat(lines[1]).isEqualTo("\"2023-11-14T22:13:20Z\"");
+        assertThat(lines[1]).isEqualTo("{\"title\":\"Hello\"}");
+    }
+
+    @Test
+    void bulkIndexRejectsNonObjectSource() {
+        // Timestamp becomes an RFC3339 JSON string via JsonFormat — invalid as a bulk _source.
+        Timestamp ts = Timestamp.newBuilder().setSeconds(1_700_000_000L).build();
+        StringBuilder out = new StringBuilder();
+        assertThatThrownBy(() -> writer.writeBulkIndex(out, "docs", "id-1", ts))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("JSON object")
+                .hasMessageContaining("google.protobuf.Timestamp");
+        assertThat(out).isEmpty();
+    }
+
+    @Test
+    void bulkDeleteRejectsBlankId() {
+        StringBuilder out = new StringBuilder();
+        assertThatThrownBy(() -> writer.writeBulkDelete(out, "docs", ""))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(out).isEmpty();
     }
 
     @Test

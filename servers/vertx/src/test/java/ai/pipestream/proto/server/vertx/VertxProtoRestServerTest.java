@@ -72,4 +72,30 @@ class VertxProtoRestServerTest {
                     context.completeNow();
                 })));
     }
+
+    @Test
+    void invokeViaGetWithoutBody(Vertx vertx, VertxTestContext context) {
+        WebClient client = WebClient.create(vertx);
+        client.get(port, "127.0.0.1", "/grpc-json/EchoService/Echo")
+                .putHeader("api_token", "secret")
+                .send()
+                .onComplete(context.succeeding(response -> context.verify(() -> {
+                    assertThat(response.statusCode()).isEqualTo(200);
+                    assertThat(response.bodyAsString()).contains("hello ");
+                    context.completeNow();
+                })));
+    }
+
+    @Test
+    void invokeViaDeleteWithoutBody(Vertx vertx, VertxTestContext context) {
+        WebClient client = WebClient.create(vertx);
+        client.delete(port, "127.0.0.1", "/grpc-json/EchoService/Echo")
+                .putHeader("api_token", "secret")
+                .send()
+                .onComplete(context.succeeding(response -> context.verify(() -> {
+                    assertThat(response.statusCode()).isEqualTo(200);
+                    assertThat(response.bodyAsString()).contains("hello ");
+                    context.completeNow();
+                })));
+    }
 }

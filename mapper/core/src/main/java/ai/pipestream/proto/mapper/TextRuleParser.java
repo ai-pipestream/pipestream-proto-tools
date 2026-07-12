@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  */
 public final class TextRuleParser {
 
-    private static final Pattern ASSIGN_PATTERN = Pattern.compile("^\\s*([^=\\s]+)\\s*=\\s*(.+)\\s*$");
+    private static final Pattern ASSIGN_PATTERN = Pattern.compile("^\\s*([^=+\\s]+)\\s*=\\s*(.+)\\s*$");
     private static final Pattern APPEND_PATTERN = Pattern.compile("^\\s*([^+\\s]+)\\s*\\+=\\s*(.+)\\s*$");
     private static final Pattern CLEAR_PATTERN = Pattern.compile("^\\s*-\\s*(\\S+)\\s*$");
 
@@ -22,13 +22,13 @@ public final class TextRuleParser {
             }
             Matcher assignMatcher = ASSIGN_PATTERN.matcher(ruleString);
             if (assignMatcher.matches()) {
-                rules.add(new TextMappingRule(assignMatcher.group(1), assignMatcher.group(2),
+                rules.add(new TextMappingRule(assignMatcher.group(1), assignMatcher.group(2).trim(),
                         TextMappingRule.Operation.ASSIGN, ruleString));
                 continue;
             }
             Matcher appendMatcher = APPEND_PATTERN.matcher(ruleString);
             if (appendMatcher.matches()) {
-                rules.add(new TextMappingRule(appendMatcher.group(1), appendMatcher.group(2),
+                rules.add(new TextMappingRule(appendMatcher.group(1), appendMatcher.group(2).trim(),
                         TextMappingRule.Operation.APPEND, ruleString));
                 continue;
             }

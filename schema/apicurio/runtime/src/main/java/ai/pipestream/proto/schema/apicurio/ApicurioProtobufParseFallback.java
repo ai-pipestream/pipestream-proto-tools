@@ -70,12 +70,12 @@ public final class ApicurioProtobufParseFallback {
                     throw new IllegalStateException(
                             "Wire-format prefix truncated: expected " + prefix + " bytes");
                 }
-            }
-            if (readIndexes) {
-                skipMessageIndexes(in);
-            }
-            if (readTypeRef) {
-                skipDelimitedMessage(in);
+                if (readIndexes) {
+                    skipMessageIndexes(in);
+                }
+                if (readTypeRef) {
+                    skipDelimitedMessage(in);
+                }
             }
             return (T) parseFrom.invoke(null, in);
         } catch (IllegalAccessException | InvocationTargetException | IOException e) {
@@ -84,12 +84,18 @@ public final class ApicurioProtobufParseFallback {
         }
     }
 
-    /** Skips Confluent-style message indexes (varint count + varints). */
+    /** Skips Confluent-style message indexes (zigzag varint count + zigzag varints). */
     static void skipMessageIndexes(InputStream in) throws IOException {
-        int count = readVarint(in);
+        int count = readZigZagVarint(in);
         for (int i = 0; i < count; i++) {
-            readVarint(in);
+            readZigZagVarint(in);
         }
+    }
+
+    /** Reads a zigzag-encoded varint (Confluent message indexes use zigzag encoding). */
+    static int readZigZagVarint(InputStream in) throws IOException {
+        int raw = readVarint(in);
+        return (raw >>> 1) ^ -(raw & 1);
     }
 
     /** Skips a length-delimited protobuf message (Apicurio type Ref). */

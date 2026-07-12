@@ -126,7 +126,8 @@ public class AnyHandlerTest {
 
         assertNotNull(struct);
         assertEquals("Struct Person", struct.getFieldsOrThrow("name").getStringValue());
-        assertEquals(35.0, struct.getFieldsOrThrow("age").getNumberValue(), 0.001);
+        // int64 encodes as a string per the proto3 JSON convention
+        assertEquals("35", struct.getFieldsOrThrow("age").getStringValue());
         assertEquals("struct@example.com", struct.getFieldsOrThrow("email").getStringValue());
     }
 

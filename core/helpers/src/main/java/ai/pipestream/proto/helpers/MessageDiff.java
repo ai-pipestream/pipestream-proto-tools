@@ -4,7 +4,9 @@ import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.MessageOrBuilder;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -35,7 +37,12 @@ public final class MessageDiff {
             }
             Object lv = leftSet ? left.getField(field) : null;
             Object rv = rightSet ? right.getField(field) : null;
-            if (field.isRepeated() || field.getJavaType() != FieldDescriptor.JavaType.MESSAGE) {
+            if (field.isMapField()) {
+                // Map entry lists are insertion-ordered; compare as maps so key order is irrelevant.
+                if (!Objects.equals(mapEntries(lv), mapEntries(rv))) {
+                    out.add(new FieldChange(path, lv, rv));
+                }
+            } else if (field.isRepeated() || field.getJavaType() != FieldDescriptor.JavaType.MESSAGE) {
                 if (!Objects.equals(lv, rv)) {
                     out.add(new FieldChange(path, lv, rv));
                 }
@@ -45,5 +52,23 @@ public final class MessageDiff {
                 out.add(new FieldChange(path, lv, rv));
             }
         }
+        if (!left.getUnknownFields().equals(right.getUnknownFields())) {
+            String path = prefix.isEmpty() ? "(unknown fields)" : prefix + ".(unknown fields)";
+            out.add(new FieldChange(path, left.getUnknownFields(), right.getUnknownFields()));
+        }
+    }
+
+    private static Map<Object, Object> mapEntries(Object entryList) {
+        if (entryList == null) {
+            return Map.of();
+        }
+        Map<Object, Object> entries = new HashMap<>();
+        for (Object entry : (List<?>) entryList) {
+            MessageOrBuilder message = (MessageOrBuilder) entry;
+            FieldDescriptor keyField = message.getDescriptorForType().findFieldByNumber(1);
+            FieldDescriptor valueField = message.getDescriptorForType().findFieldByNumber(2);
+            entries.put(message.getField(keyField), message.getField(valueField));
+        }
+        return entries;
     }
 }

@@ -3,6 +3,7 @@ package ai.pipestream.proto.helpers;
 import com.google.protobuf.*;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.DescriptorValidationException;
+import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -126,8 +127,47 @@ public class TypeConverterTest {
         Struct struct = converter.messageToStruct(testMessage);
         assertNotNull(struct);
         assertEquals("TestName", struct.getFieldsOrThrow("name").getStringValue());
-        assertEquals(25.0, struct.getFieldsOrThrow("age").getNumberValue(), 0.001);
+        // int64 encodes as a string per the proto3 JSON convention (no double precision loss)
+        assertEquals("25", struct.getFieldsOrThrow("age").getStringValue());
         assertTrue(struct.getFieldsOrThrow("active").getBoolValue());
+    }
+
+    @Test
+    void testInt64RoundTripPreservesLargeValues() {
+        FieldDescriptor ageField = testMessageDescriptor.findFieldByName("age");
+        Message message = DynamicMessage.newBuilder(testMessageDescriptor)
+                .setField(ageField, 9007199254740993L)
+                .build();
+
+        Struct struct = converter.messageToStruct(message);
+        assertEquals("9007199254740993", struct.getFieldsOrThrow("age").getStringValue());
+
+        DynamicMessage restored = converter.structToMessage(struct, testMessageDescriptor);
+        assertEquals(9007199254740993L, restored.getField(ageField));
+    }
+
+    @Test
+    void testStructToMessageRejectsOutOfRangeIntNumber() throws DescriptorValidationException {
+        FileDescriptor fd = createIntFieldDescriptor();
+        Descriptor intDescriptor = fd.findMessageTypeByName("IntMessage");
+        Struct struct = Struct.newBuilder()
+                .putFields("count", Value.newBuilder().setNumberValue(5e9).build())
+                .build();
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> converter.structToMessage(struct, intDescriptor));
+        assertTrue(ex.getMessage().contains("count"));
+    }
+
+    @Test
+    void testStructToMessageRejectsNonIntegralNumberForLongField() {
+        Struct struct = Struct.newBuilder()
+                .putFields("age", Value.newBuilder().setNumberValue(1.5).build())
+                .build();
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> converter.structToMessage(struct, testMessageDescriptor));
+        assertTrue(ex.getMessage().contains("age"));
     }
 
     @Test
@@ -192,6 +232,77 @@ public class TypeConverterTest {
         assertEquals("tag3", tags.getValues(2).getStringValue());
     }
 
+    @Test
+    void testStructToMessageRoundTripWithRepeatedFields() throws DescriptorValidationException {
+        FileDescriptor fd = createRepeatedRoundTripDescriptor();
+        Descriptor parentDescriptor = fd.findMessageTypeByName("ParentMessage");
+        Descriptor childDescriptor = fd.findMessageTypeByName("ChildMessage");
+
+        Message child1 = DynamicMessage.newBuilder(childDescriptor)
+                .setField(childDescriptor.findFieldByName("name"), "child1")
+                .build();
+        Message child2 = DynamicMessage.newBuilder(childDescriptor)
+                .setField(childDescriptor.findFieldByName("name"), "child2")
+                .build();
+
+        Message original = DynamicMessage.newBuilder(parentDescriptor)
+                .addRepeatedField(parentDescriptor.findFieldByName("tags"), "tag1")
+                .addRepeatedField(parentDescriptor.findFieldByName("tags"), "tag2")
+                .addRepeatedField(parentDescriptor.findFieldByName("children"), child1)
+                .addRepeatedField(parentDescriptor.findFieldByName("children"), child2)
+                .build();
+
+        Struct struct = converter.messageToStruct(original);
+        DynamicMessage restored = converter.structToMessage(struct, parentDescriptor);
+
+        FieldDescriptor tagsField = parentDescriptor.findFieldByName("tags");
+        assertEquals(2, restored.getRepeatedFieldCount(tagsField));
+        assertEquals("tag1", restored.getRepeatedField(tagsField, 0));
+        assertEquals("tag2", restored.getRepeatedField(tagsField, 1));
+
+        FieldDescriptor childrenField = parentDescriptor.findFieldByName("children");
+        assertEquals(2, restored.getRepeatedFieldCount(childrenField));
+        Message restoredChild1 = (Message) restored.getRepeatedField(childrenField, 0);
+        Message restoredChild2 = (Message) restored.getRepeatedField(childrenField, 1);
+        assertEquals("child1", restoredChild1.getField(childDescriptor.findFieldByName("name")));
+        assertEquals("child2", restoredChild2.getField(childDescriptor.findFieldByName("name")));
+    }
+
+    @Test
+    void testStructToMessageWrapsSingleValueIntoRepeatedField() throws DescriptorValidationException {
+        FileDescriptor fd = createRepeatedRoundTripDescriptor();
+        Descriptor parentDescriptor = fd.findMessageTypeByName("ParentMessage");
+
+        Struct struct = Struct.newBuilder()
+                .putFields("tags", Value.newBuilder().setStringValue("solo").build())
+                .build();
+
+        DynamicMessage restored = converter.structToMessage(struct, parentDescriptor);
+        FieldDescriptor tagsField = parentDescriptor.findFieldByName("tags");
+        assertEquals(1, restored.getRepeatedFieldCount(tagsField));
+        assertEquals("solo", restored.getRepeatedField(tagsField, 0));
+    }
+
+    @Test
+    void testBytesFieldRoundTripsThroughBase64() throws DescriptorValidationException {
+        FileDescriptor fd = createBytesFieldDescriptor();
+        Descriptor bytesDescriptor = fd.findMessageTypeByName("BytesMessage");
+        FieldDescriptor dataField = bytesDescriptor.findFieldByName("data");
+
+        ByteString nonUtf8 = ByteString.copyFrom(new byte[]{(byte) 0x89, 0x50, (byte) 0xC3});
+        Message original = DynamicMessage.newBuilder(bytesDescriptor)
+                .setField(dataField, nonUtf8)
+                .build();
+
+        Struct struct = converter.messageToStruct(original);
+        assertEquals(
+                java.util.Base64.getEncoder().encodeToString(nonUtf8.toByteArray()),
+                struct.getFieldsOrThrow("data").getStringValue());
+
+        DynamicMessage restored = converter.structToMessage(struct, bytesDescriptor);
+        assertEquals(nonUtf8, restored.getField(dataField));
+    }
+
     private static FileDescriptor createTestFileDescriptor() throws DescriptorValidationException {
         DescriptorProto testMessageProto = DescriptorProto.newBuilder()
                 .setName("TestMessage")
@@ -210,6 +321,71 @@ public class TypeConverterTest {
                 .setName("test_converter.proto")
                 .setPackage("ai.pipestream.test")
                 .addMessageType(testMessageProto)
+                .build();
+
+        return FileDescriptor.buildFrom(fileProto, new FileDescriptor[]{});
+    }
+
+    private static FileDescriptor createRepeatedRoundTripDescriptor() throws DescriptorValidationException {
+        DescriptorProto childMessageProto = DescriptorProto.newBuilder()
+                .setName("ChildMessage")
+                .addField(FieldDescriptorProto.newBuilder()
+                        .setName("name").setNumber(1)
+                        .setType(FieldDescriptorProto.Type.TYPE_STRING))
+                .build();
+
+        DescriptorProto parentMessageProto = DescriptorProto.newBuilder()
+                .setName("ParentMessage")
+                .addField(FieldDescriptorProto.newBuilder()
+                        .setName("tags").setNumber(1)
+                        .setType(FieldDescriptorProto.Type.TYPE_STRING)
+                        .setLabel(FieldDescriptorProto.Label.LABEL_REPEATED))
+                .addField(FieldDescriptorProto.newBuilder()
+                        .setName("children").setNumber(2)
+                        .setType(FieldDescriptorProto.Type.TYPE_MESSAGE)
+                        .setTypeName(".ai.pipestream.test.ChildMessage")
+                        .setLabel(FieldDescriptorProto.Label.LABEL_REPEATED))
+                .build();
+
+        DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()
+                .setName("test_repeated_round_trip.proto")
+                .setPackage("ai.pipestream.test")
+                .addMessageType(childMessageProto)
+                .addMessageType(parentMessageProto)
+                .build();
+
+        return FileDescriptor.buildFrom(fileProto, new FileDescriptor[]{});
+    }
+
+    private static FileDescriptor createIntFieldDescriptor() throws DescriptorValidationException {
+        DescriptorProto intMessageProto = DescriptorProto.newBuilder()
+                .setName("IntMessage")
+                .addField(FieldDescriptorProto.newBuilder()
+                        .setName("count").setNumber(1)
+                        .setType(FieldDescriptorProto.Type.TYPE_INT32))
+                .build();
+
+        DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()
+                .setName("test_int.proto")
+                .setPackage("ai.pipestream.test")
+                .addMessageType(intMessageProto)
+                .build();
+
+        return FileDescriptor.buildFrom(fileProto, new FileDescriptor[]{});
+    }
+
+    private static FileDescriptor createBytesFieldDescriptor() throws DescriptorValidationException {
+        DescriptorProto bytesMessageProto = DescriptorProto.newBuilder()
+                .setName("BytesMessage")
+                .addField(FieldDescriptorProto.newBuilder()
+                        .setName("data").setNumber(1)
+                        .setType(FieldDescriptorProto.Type.TYPE_BYTES))
+                .build();
+
+        DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()
+                .setName("test_bytes.proto")
+                .setPackage("ai.pipestream.test")
+                .addMessageType(bytesMessageProto)
                 .build();
 
         return FileDescriptor.buildFrom(fileProto, new FileDescriptor[]{});

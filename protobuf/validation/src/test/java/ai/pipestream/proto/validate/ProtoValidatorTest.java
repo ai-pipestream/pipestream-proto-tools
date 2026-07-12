@@ -1,5 +1,8 @@
 package ai.pipestream.proto.validate;
 
+import ai.pipestream.proto.validate.testdata.Color;
+import ai.pipestream.proto.validate.testdata.Container;
+import ai.pipestream.proto.validate.testdata.Item;
 import ai.pipestream.proto.validate.testdata.Person;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -87,6 +90,32 @@ class ProtoValidatorTest {
 
         assertThat(result.violations())
                 .anyMatch(v -> v.ruleId().equals("adult.name"));
+    }
+
+    @Test
+    void handlesMapAndRepeatedMessageFields() {
+        ProtoValidator containerValidator = ProtoValidator.forMessageType(Container.getDescriptor());
+        Container container = Container.newBuilder()
+                .putLabels("env", "prod")
+                .addItems(Item.newBuilder().setName("widget"))
+                .setColor(Color.COLOR_RED)
+                .build();
+
+        assertThat(containerValidator.validate(container).valid()).isTrue();
+    }
+
+    @Test
+    void rejectsMissingRequiredEnum() {
+        ProtoValidator containerValidator = ProtoValidator.forMessageType(Container.getDescriptor());
+        Container container = Container.newBuilder()
+                .putLabels("env", "prod")
+                .addItems(Item.newBuilder().setName("widget"))
+                .build();
+        ValidationResult result = containerValidator.validate(container);
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.violations())
+                .anyMatch(v -> v.path().equals("color") && v.ruleId().equals("required"));
     }
 
     @Test
