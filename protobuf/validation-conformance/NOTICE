@@ -1,0 +1,23 @@
+pipestream-proto-tools-protobuf-validation-conformance
+======================================================
+
+This module vendors the protovalidate conformance harness schema:
+
+  src/main/proto/buf/validate/conformance/harness/harness.proto
+
+Vendored verbatim from the bufbuild/protovalidate project:
+
+  Source:  https://github.com/bufbuild/protovalidate
+  Version: v1.2.2
+  Commit:  4baed765070e580226a0a30bf2a357cc027dc1f7
+  License: Apache License 2.0 (see LICENSE-protovalidate)
+  Copyright 2023-2026 Buf Technologies, Inc.
+
+The field-path parsing in FieldPaths.java is a Java port of the
+`internal/fieldpath` algorithm from the same project and version, so that
+structured FieldPath output matches the conformance runner byte-for-byte.
+
+The vendored file is never modified; the conformance protocol and the
+field-path grammar are defined by the upstream project. All other code in
+this module is original to pipestream-proto-tools and licensed under the
+repository's MIT license.

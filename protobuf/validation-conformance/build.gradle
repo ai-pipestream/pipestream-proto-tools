@@ -1,0 +1,26 @@
+plugins {
+    alias(libs.plugins.protobuf)
+    id 'application'
+}
+
+description = 'protovalidate conformance harness — drives ProtoValidator against the buf conformance suite'
+
+dependencies {
+    // Brings in the validation core + the buf.validate dialect (build.buf.validate.* types,
+    // BufValidateRuleSource auto-registered via ServiceLoader). harness.proto imports
+    // buf/validate/validate.proto, which this project dependency supplies to protoc.
+    api project(':pipestream-proto-tools-protobuf-validation-buf')
+
+    testImplementation libs.protobuf.java.util
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:4.35.1"
+    }
+}
+
+application {
+    // Phase 2: the stdin/stdout executor driven by buf's protovalidate-conformance binary.
+    mainClass = 'ai.pipestream.proto.validate.conformance.ConformanceMain'
+}

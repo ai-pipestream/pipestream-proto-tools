@@ -44,6 +44,7 @@ samples/
 | `…-protobuf-metadata` | `protobuf/metadata` | **Metadata standard** — Field/Message options |
 | `…-protobuf-validation` | `protobuf/validation` | **Validation standard** — CEL + constraints, pluggable rule-source dialects |
 | `…-protobuf-validation-buf` | `protobuf/validation-buf` | Optional protovalidate (`buf.validate`) dialect (vendored proto, pinned + attributed) |
+| `…-protobuf-validation-conformance` | `protobuf/validation-conformance` | protovalidate conformance harness — in-build pass-rate + stdin/stdout executor |
 | `…-protobuf-indexing` | `protobuf/indexing` | **Indexing standard** facade — optional validate → NDJSON |
 | `…-schema-apicurio` | `schema/apicurio` | Apicurio Registry → descriptors |
 | `…-schema-confluent` | `schema/confluent` | Confluent-compatible SR → descriptors (subjects REST API or binary descriptor sets) |
@@ -370,8 +371,36 @@ unchanged — dropping the jar on the classpath is enough. All scalar and collec
 rule families translate, including every integer variant with unsigned semantics and
 `IGNORE_ALWAYS`; the Javadoc lists the not-yet-translated tail (byte-length string
 rules, exotic well-known formats, `Any`/`FieldMask` rules, predefined-rule extensions,
-protovalidate's custom CEL function library). Compatibility will be measured and
-published against the protovalidate conformance suite rather than claimed.
+protovalidate's custom CEL function library). Compatibility is measured, not
+claimed: the `…-protobuf-validation-conformance` module drives `ProtoValidator`
+against protovalidate's own conformance suite (see below).
+
+#### Conformance harness
+
+`…-protobuf-validation-conformance` runs `ProtoValidator` against the
+protovalidate v1.2.2 conformance suite in two ways that share one runner:
+
+- **In-build (phase 1):** a JUnit harness validates a curated set of
+  `buf.validate`-annotated cases and prints a pass-rate table, comparing the
+  structured `field` and `rule` paths, `rule_id`, and `for_key` of every
+  violation exactly as the suite does. It runs in `./gradlew build` and gates at
+  100%, so any drift in the rule ids or paths the validator emits fails the build.
+- **Authoritative (phase 2):** `ConformanceMain` speaks the language-agnostic
+  executor protocol (a `TestConformanceRequest` on stdin, a
+  `TestConformanceResponse` on stdout), so buf's own `protovalidate-conformance`
+  binary can drive it and score the full suite:
+
+  ```bash
+  ./gradlew :pipestream-proto-tools-protobuf-validation-conformance:installDist
+  protovalidate-conformance \
+    protobuf/validation-conformance/build/install/pipestream-proto-tools-protobuf-validation-conformance/bin/pipestream-proto-tools-protobuf-validation-conformance
+  ```
+
+  Structured field/rule paths are reconstructed via a faithful port of the
+  suite's own field-path algorithm, so matches reflect genuine semantic
+  agreement rather than formatting. Known gaps (the untranslated rule tail above)
+  surface as suite failures — which is the point: the run tells us what to build
+  next.
 
 #### JSON Schema from descriptors + rules
 
