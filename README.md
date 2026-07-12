@@ -41,7 +41,7 @@ samples/
 | `…-mapper-cel` | `mapper/cel` | CEL env, evaluator, filter/selector mapper |
 | `…-metadata` | `mapper/metadata` | CEL selectors → metadata bag (runtime extraction) |
 | `…-protobuf-metadata` | `protobuf/metadata` | **Metadata standard** — Field/Message options |
-| `…-protobuf-validation` | `protobuf/validation` | **Validation standard** — CEL + constraints (no Protovalidate) |
+| `…-protobuf-validation` | `protobuf/validation` | **Validation standard** — CEL + constraints, pluggable rule sources (no Protovalidate runtime) |
 | `…-protobuf-indexing` | `protobuf/indexing` | **Indexing standard** facade — optional validate → NDJSON |
 | `…-schema-apicurio` | `schema/apicurio` | Apicurio Registry → descriptors |
 | `…-schema-confluent` | `schema/confluent` | Confluent-compatible SR → descriptors (subjects REST API or binary descriptor sets) |
@@ -219,7 +219,7 @@ subset; chain validate → index only when you want to.
 | Standard | Artifact | Option namespace | Role |
 |---|---|---|---|
 | Metadata | `…-protobuf-metadata` | `(ai.pipestream.proto.meta.v1.field\|message)` | How descriptive/ops metadata is held on schemas |
-| Validation | `…-protobuf-validation` | `(ai.pipestream.proto.validate.v1.field\|message)` | CEL + standard constraints |
+| Validation | `…-protobuf-validation` | `(ai.pipestream.proto.validate.v1.field\|message)` + any `ValidationRuleSource` dialect | CEL + standard constraints, neutral rule model |
 | Indexing | `…-index-spi` (+ `…-protobuf-indexing`) | `(ai.pipestream.proto.index.hints.v1.index)` | Field kinds → plan → NDJSON → Lucene/OS/Solr |
 
 Mapping (`mapper-core` / `mapper-cel`) stays a fourth pillar — richer OOTB mapping
@@ -307,6 +307,39 @@ message Person {
 var result = ProtoValidator.forMessageType(Person.getDescriptor()).validate(person);
 result.throwIfInvalid();
 ```
+
+#### Rule sources (extension seam)
+
+`ProtoValidator` does not read any specific annotation dialect directly. It evaluates a
+neutral constraint model (`ai.pipestream.proto.validate.model` — `FieldConstraints`,
+`StringConstraints`, `IntegralConstraints`, `FloatingConstraints`, `CelConstraint`,
+`MessageConstraints`). Each annotation dialect is a `ValidationRuleSource` that reads its
+own options off the descriptor and translates them into that model. The built-in
+`AiPipestreamRuleSource` reads the Pipestream `validate.v1` options.
+
+```java
+public interface ValidationRuleSource {
+    Optional<FieldConstraints>   fieldConstraints(FieldDescriptor field);
+    Optional<MessageConstraints> messageConstraints(Descriptor message);
+}
+```
+
+Every configured source is consulted per field/message and all violations are **merged** —
+no source silently wins. The default chain is the built-in reader plus any
+`ValidationRuleSource` discovered on the classpath via `ServiceLoader`
+(`ValidationRuleSources.defaults()`), so an optional dialect module lights up just by being
+present and is removed cleanly by dropping it. Pin the chain explicitly when you want to:
+
+```java
+// built-in only, ignore classpath extensions
+ProtoValidator.forMessageType(desc, ValidationRuleSources.pipestreamOnly());
+// explicit multi-dialect chain
+ProtoValidator.forMessageType(desc, List.of(new AiPipestreamRuleSource(), new BufValidateRuleSource()));
+```
+
+This is the seam for **`buf.validate` compatibility**: a separate, optional module vendors
+`buf/validate/validate.proto` (descriptors + NOTICE) and adds a `BufValidateRuleSource` — no
+buf runtime code in the tree, and no coupling into the core beyond this interface.
 
 ### Indexing (+ optional validate chain)
 

@@ -3,6 +3,14 @@ package ai.pipestream.proto.validate;
 import ai.pipestream.proto.cel.CelEnvironmentFactory;
 import ai.pipestream.proto.cel.CelEvaluationException;
 import ai.pipestream.proto.cel.CelEvaluator;
+import ai.pipestream.proto.validate.model.CelConstraint;
+import ai.pipestream.proto.validate.model.FieldConstraints;
+import ai.pipestream.proto.validate.model.FloatingConstraints;
+import ai.pipestream.proto.validate.model.IntegralConstraints;
+import ai.pipestream.proto.validate.model.MessageConstraints;
+import ai.pipestream.proto.validate.model.StringConstraints;
+import ai.pipestream.proto.validate.spi.ValidationRuleSource;
+import ai.pipestream.proto.validate.spi.ValidationRuleSources;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Message;
@@ -14,28 +22,48 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
- * Validates protobuf messages using {@code (ai.pipestream.proto.validate.v1.field|message)}
- * options. Standard constraints run in-process; custom rules use CEL with {@code this}.
+ * Validates protobuf messages against constraint annotations. The validator core
+ * evaluates a neutral {@link FieldConstraints}/{@link MessageConstraints} model; the
+ * mapping from a specific annotation dialect (Pipestream {@code validate.v1},
+ * {@code buf.validate}, …) onto that model lives behind {@link ValidationRuleSource}.
+ * Standard constraints run in-process; custom rules use CEL with {@code this}.
+ *
+ * <p>By default the built-in Pipestream reader is used plus any {@link ValidationRuleSource}
+ * discovered on the classpath via {@link java.util.ServiceLoader}. Every configured source
+ * is consulted per field/message and all violations are merged.
  */
 public final class ProtoValidator {
 
     private final CelEvaluator fieldCel;
     private final CelEvaluator messageCel;
+    private final List<ValidationRuleSource> sources;
 
+    /** Uses the default rule-source chain ({@link ValidationRuleSources#defaults()}). */
     public ProtoValidator(CelEvaluator fieldCel, CelEvaluator messageCel) {
+        this(fieldCel, messageCel, ValidationRuleSources.defaults());
+    }
+
+    public ProtoValidator(
+            CelEvaluator fieldCel, CelEvaluator messageCel, List<ValidationRuleSource> sources) {
         this.fieldCel = Objects.requireNonNull(fieldCel, "fieldCel");
         this.messageCel = Objects.requireNonNull(messageCel, "messageCel");
+        this.sources = List.copyOf(Objects.requireNonNull(sources, "sources"));
     }
 
     /** Default CEL environments: {@code this} is DYN for field and message rules. */
     public static ProtoValidator create() {
+        return create(ValidationRuleSources.defaults());
+    }
+
+    /** As {@link #create()} but with an explicit rule-source chain. */
+    public static ProtoValidator create(List<ValidationRuleSource> sources) {
         CelEvaluator field = new CelEvaluator(CelEnvironmentFactory.builder()
                 .addVar("this")
                 .build());
         CelEvaluator message = new CelEvaluator(CelEnvironmentFactory.builder()
                 .addVar("this")
                 .build());
-        return new ProtoValidator(field, message);
+        return new ProtoValidator(field, message, sources);
     }
 
     /**
@@ -43,6 +71,12 @@ public final class ProtoValidator {
      * (field access like {@code this.age}).
      */
     public static ProtoValidator forMessageType(Descriptor descriptor) {
+        return forMessageType(descriptor, ValidationRuleSources.defaults());
+    }
+
+    /** As {@link #forMessageType(Descriptor)} but with an explicit rule-source chain. */
+    public static ProtoValidator forMessageType(
+            Descriptor descriptor, List<ValidationRuleSource> sources) {
         Objects.requireNonNull(descriptor, "descriptor");
         CelEvaluator field = new CelEvaluator(CelEnvironmentFactory.builder()
                 .addVar("this")
@@ -51,7 +85,7 @@ public final class ProtoValidator {
                 .addMessageType(descriptor)
                 .addVar("this")
                 .build());
-        return new ProtoValidator(field, message);
+        return new ProtoValidator(field, message, sources);
     }
 
     public ValidationResult validate(Message message) {
@@ -67,49 +101,50 @@ public final class ProtoValidator {
                 : ValidationResult.failed(violations);
     }
 
+    private List<FieldConstraints> fieldConstraints(FieldDescriptor field) {
+        List<FieldConstraints> collected = new ArrayList<>(sources.size());
+        for (ValidationRuleSource source : sources) {
+            source.fieldConstraints(field).ifPresent(collected::add);
+        }
+        return collected;
+    }
+
     private void validateField(
             Message message,
             FieldDescriptor field,
             String path,
             List<ValidationResult.Violation> violations) {
-        var options = field.getOptions();
-        if (!options.hasExtension(ValidateProto.field)) {
-            if (field.getJavaType() == FieldDescriptor.JavaType.MESSAGE
-                    && !field.isRepeated()
-                    && message.hasField(field)) {
-                Object value = message.getField(field);
-                if (value instanceof Message nested) {
-                    for (FieldDescriptor child : nested.getDescriptorForType().getFields()) {
-                        validateField(nested, child, path + "." + child.getName(), violations);
-                    }
-                    validateMessageRules(nested, nested.getDescriptorForType(), path, violations);
-                }
-            }
-            return;
-        }
-        FieldRules rules = options.getExtension(ValidateProto.field);
+        List<FieldConstraints> constraints = fieldConstraints(field);
         boolean present = isPresent(message, field);
-        if (rules.getRequired() && !present) {
+
+        boolean requiredUnset = constraints.stream().anyMatch(FieldConstraints::required) && !present;
+        if (requiredUnset) {
             violations.add(new ValidationResult.Violation(path, "required", "field is required"));
             return;
         }
         if (!present) {
             return;
         }
+
         Object value = message.getField(field);
         if (field.isRepeated()) {
             // Scalar repeated: run CEL per element when configured; skip type rules for v1.
             if (value instanceof List<?> list) {
                 int i = 0;
                 for (Object element : list) {
-                    runFieldCel(rules, element, path + "[" + i + "]", violations);
+                    for (FieldConstraints c : constraints) {
+                        runFieldCel(c, element, path + "[" + i + "]", violations);
+                    }
                     i++;
                 }
             }
             return;
         }
-        applyScalarRules(field, rules, value, path, violations);
-        runFieldCel(rules, value, path, violations);
+
+        for (FieldConstraints c : constraints) {
+            applyFieldConstraints(field, c, value, path, violations);
+            runFieldCel(c, value, path, violations);
+        }
         if (value instanceof Message nested) {
             for (FieldDescriptor child : nested.getDescriptorForType().getFields()) {
                 validateField(nested, child, path + "." + child.getName(), violations);
@@ -118,40 +153,42 @@ public final class ProtoValidator {
         }
     }
 
-    private void applyScalarRules(
+    private static void applyFieldConstraints(
             FieldDescriptor field,
-            FieldRules rules,
+            FieldConstraints constraints,
             Object value,
             String path,
             List<ValidationResult.Violation> violations) {
         switch (field.getJavaType()) {
-            case STRING -> applyString(rules.getString(), (String) value, path, violations);
-            case INT -> applyInt32(rules.getInt32(), ((Number) value).intValue(), path, violations);
-            case LONG -> applyInt64(rules.getInt64(), ((Number) value).longValue(), path, violations);
-            case FLOAT -> applyFloat(rules.getFloat(), ((Number) value).floatValue(), path, violations);
-            case DOUBLE -> applyDouble(rules.getDouble(), ((Number) value).doubleValue(), path, violations);
+            case STRING -> constraints.string()
+                    .ifPresent(s -> applyString(s, (String) value, path, violations));
+            case INT, LONG -> constraints.integral()
+                    .ifPresent(n -> applyIntegral(n, ((Number) value).longValue(), path, violations));
+            case FLOAT, DOUBLE -> constraints.floating()
+                    .ifPresent(n -> applyFloating(n, ((Number) value).doubleValue(), path, violations));
             default -> {
             }
         }
     }
 
     private static void applyString(
-            StringRules rules, String value, String path, List<ValidationResult.Violation> violations) {
+            StringConstraints rules, String value, String path,
+            List<ValidationResult.Violation> violations) {
         long len = value.codePointCount(0, value.length());
-        if (rules.hasMinLen() && len < rules.getMinLen()) {
+        if (rules.minLen().isPresent() && len < rules.minLen().getAsLong()) {
             violations.add(new ValidationResult.Violation(
-                    path, "string.min_len", "length must be at least " + rules.getMinLen()));
+                    path, "string.min_len", "length must be at least " + rules.minLen().getAsLong()));
         }
-        if (rules.hasMaxLen() && len > rules.getMaxLen()) {
+        if (rules.maxLen().isPresent() && len > rules.maxLen().getAsLong()) {
             violations.add(new ValidationResult.Violation(
-                    path, "string.max_len", "length must be at most " + rules.getMaxLen()));
+                    path, "string.max_len", "length must be at most " + rules.maxLen().getAsLong()));
         }
-        if (rules.hasPattern() && !rules.getPattern().isEmpty()
-                && !Pattern.compile(rules.getPattern()).matcher(value).find()) {
+        if (rules.pattern().isPresent()
+                && !Pattern.compile(rules.pattern().get()).matcher(value).find()) {
             violations.add(new ValidationResult.Violation(
                     path, "string.pattern", "value does not match pattern"));
         }
-        if (rules.getEmail() && !looksLikeEmail(value)) {
+        if (rules.email() && !looksLikeEmail(value)) {
             violations.add(new ValidationResult.Violation(
                     path, "string.email", "value must look like an email address"));
         }
@@ -162,73 +199,46 @@ public final class ProtoValidator {
         return at > 0 && at < value.length() - 1 && value.indexOf('@', at + 1) < 0;
     }
 
-    private static void applyInt32(
-            Int32Rules rules, int value, String path, List<ValidationResult.Violation> violations) {
-        if (rules.hasGt() && !(value > rules.getGt())) {
-            violations.add(violation(path, "int32.gt", "must be > " + rules.getGt()));
+    private static void applyIntegral(
+            IntegralConstraints rules, long value, String path,
+            List<ValidationResult.Violation> violations) {
+        String prefix = rules.ruleIdPrefix();
+        if (rules.gt().isPresent() && !(value > rules.gt().getAsLong())) {
+            violations.add(violation(path, prefix + ".gt", "must be > " + rules.gt().getAsLong()));
         }
-        if (rules.hasGte() && !(value >= rules.getGte())) {
-            violations.add(violation(path, "int32.gte", "must be >= " + rules.getGte()));
+        if (rules.gte().isPresent() && !(value >= rules.gte().getAsLong())) {
+            violations.add(violation(path, prefix + ".gte", "must be >= " + rules.gte().getAsLong()));
         }
-        if (rules.hasLt() && !(value < rules.getLt())) {
-            violations.add(violation(path, "int32.lt", "must be < " + rules.getLt()));
+        if (rules.lt().isPresent() && !(value < rules.lt().getAsLong())) {
+            violations.add(violation(path, prefix + ".lt", "must be < " + rules.lt().getAsLong()));
         }
-        if (rules.hasLte() && !(value <= rules.getLte())) {
-            violations.add(violation(path, "int32.lte", "must be <= " + rules.getLte()));
-        }
-    }
-
-    private static void applyInt64(
-            Int64Rules rules, long value, String path, List<ValidationResult.Violation> violations) {
-        if (rules.hasGt() && !(value > rules.getGt())) {
-            violations.add(violation(path, "int64.gt", "must be > " + rules.getGt()));
-        }
-        if (rules.hasGte() && !(value >= rules.getGte())) {
-            violations.add(violation(path, "int64.gte", "must be >= " + rules.getGte()));
-        }
-        if (rules.hasLt() && !(value < rules.getLt())) {
-            violations.add(violation(path, "int64.lt", "must be < " + rules.getLt()));
-        }
-        if (rules.hasLte() && !(value <= rules.getLte())) {
-            violations.add(violation(path, "int64.lte", "must be <= " + rules.getLte()));
+        if (rules.lte().isPresent() && !(value <= rules.lte().getAsLong())) {
+            violations.add(violation(path, prefix + ".lte", "must be <= " + rules.lte().getAsLong()));
         }
     }
 
-    private static void applyFloat(
-            FloatRules rules, float value, String path, List<ValidationResult.Violation> violations) {
-        if (rules.hasGt() && !(value > rules.getGt())) {
-            violations.add(violation(path, "float.gt", "must be > " + rules.getGt()));
+    private static void applyFloating(
+            FloatingConstraints rules, double value, String path,
+            List<ValidationResult.Violation> violations) {
+        String prefix = rules.ruleIdPrefix();
+        if (rules.gt().isPresent() && !(value > rules.gt().getAsDouble())) {
+            violations.add(violation(path, prefix + ".gt", "must be > " + rules.gt().getAsDouble()));
         }
-        if (rules.hasGte() && !(value >= rules.getGte())) {
-            violations.add(violation(path, "float.gte", "must be >= " + rules.getGte()));
+        if (rules.gte().isPresent() && !(value >= rules.gte().getAsDouble())) {
+            violations.add(violation(path, prefix + ".gte", "must be >= " + rules.gte().getAsDouble()));
         }
-        if (rules.hasLt() && !(value < rules.getLt())) {
-            violations.add(violation(path, "float.lt", "must be < " + rules.getLt()));
+        if (rules.lt().isPresent() && !(value < rules.lt().getAsDouble())) {
+            violations.add(violation(path, prefix + ".lt", "must be < " + rules.lt().getAsDouble()));
         }
-        if (rules.hasLte() && !(value <= rules.getLte())) {
-            violations.add(violation(path, "float.lte", "must be <= " + rules.getLte()));
-        }
-    }
-
-    private static void applyDouble(
-            DoubleRules rules, double value, String path, List<ValidationResult.Violation> violations) {
-        if (rules.hasGt() && !(value > rules.getGt())) {
-            violations.add(violation(path, "double.gt", "must be > " + rules.getGt()));
-        }
-        if (rules.hasGte() && !(value >= rules.getGte())) {
-            violations.add(violation(path, "double.gte", "must be >= " + rules.getGte()));
-        }
-        if (rules.hasLt() && !(value < rules.getLt())) {
-            violations.add(violation(path, "double.lt", "must be < " + rules.getLt()));
-        }
-        if (rules.hasLte() && !(value <= rules.getLte())) {
-            violations.add(violation(path, "double.lte", "must be <= " + rules.getLte()));
+        if (rules.lte().isPresent() && !(value <= rules.lte().getAsDouble())) {
+            violations.add(violation(path, prefix + ".lte", "must be <= " + rules.lte().getAsDouble()));
         }
     }
 
     private void runFieldCel(
-            FieldRules rules, Object value, String path, List<ValidationResult.Violation> violations) {
-        for (CelRule rule : rules.getCelList()) {
+            FieldConstraints constraints, Object value, String path,
+            List<ValidationResult.Violation> violations) {
+        for (CelConstraint rule : constraints.cel()) {
             evalCel(fieldCel, rule, value, path, violations);
         }
     }
@@ -238,32 +248,33 @@ public final class ProtoValidator {
             Descriptor descriptor,
             String path,
             List<ValidationResult.Violation> violations) {
-        var options = descriptor.getOptions();
-        if (!options.hasExtension(ValidateProto.message)) {
-            return;
-        }
-        MessageRules rules = options.getExtension(ValidateProto.message);
-        String msgPath = path.isEmpty() ? descriptor.getName() : path;
-        for (CelRule rule : rules.getCelList()) {
-            evalCel(messageCel, rule, message, msgPath, violations);
+        for (ValidationRuleSource source : sources) {
+            MessageConstraints constraints = source.messageConstraints(descriptor).orElse(null);
+            if (constraints == null || constraints.isEmpty()) {
+                continue;
+            }
+            String msgPath = path.isEmpty() ? descriptor.getName() : path;
+            for (CelConstraint rule : constraints.cel()) {
+                evalCel(messageCel, rule, message, msgPath, violations);
+            }
         }
     }
 
     private static void evalCel(
             CelEvaluator evaluator,
-            CelRule rule,
+            CelConstraint rule,
             Object thisValue,
             String path,
             List<ValidationResult.Violation> violations) {
-        if (rule.getExpression().isBlank()) {
+        if (rule.expression().isBlank()) {
             return;
         }
-        String id = rule.getId().isBlank() ? "cel" : rule.getId();
+        String id = rule.id().isBlank() ? "cel" : rule.id();
         try {
-            Object result = evaluator.evaluateValue(rule.getExpression(), Map.of("this", thisValue));
+            Object result = evaluator.evaluateValue(rule.expression(), Map.of("this", thisValue));
             if (result instanceof Boolean ok) {
                 if (!ok) {
-                    String msg = rule.getMessage().isBlank() ? "CEL rule failed" : rule.getMessage();
+                    String msg = rule.message().isBlank() ? "CEL rule failed" : rule.message();
                     violations.add(new ValidationResult.Violation(path, id, msg));
                 }
             } else if (result instanceof String text) {
