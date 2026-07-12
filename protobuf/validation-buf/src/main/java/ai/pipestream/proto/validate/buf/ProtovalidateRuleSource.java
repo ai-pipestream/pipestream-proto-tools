@@ -286,6 +286,15 @@ public final class ProtovalidateRuleSource implements ValidationRuleSource {
         if (r.hasMaxLen()) {
             b.maxLen(r.getMaxLen());
         }
+        if (r.hasLenBytes()) {
+            b.lenBytes(r.getLenBytes());
+        }
+        if (r.hasMinBytes()) {
+            b.minBytes(r.getMinBytes());
+        }
+        if (r.hasMaxBytes()) {
+            b.maxBytes(r.getMaxBytes());
+        }
         if (r.hasPattern() && !r.getPattern().isEmpty()) {
             b.pattern(r.getPattern());
         }
@@ -319,8 +328,14 @@ public final class ProtovalidateRuleSource implements ValidationRuleSource {
             case IPV4_PREFIX -> applyFlag(b, StringFormat.IPV4_PREFIX, r.getIpv4Prefix());
             case IPV6_PREFIX -> applyFlag(b, StringFormat.IPV6_PREFIX, r.getIpv6Prefix());
             case HOST_AND_PORT -> applyFlag(b, StringFormat.HOST_AND_PORT, r.getHostAndPort());
+            case IP_WITH_PREFIXLEN -> applyFlag(b, StringFormat.IP_WITH_PREFIXLEN, r.getIpWithPrefixlen());
+            case IPV4_WITH_PREFIXLEN ->
+                    applyFlag(b, StringFormat.IPV4_WITH_PREFIXLEN, r.getIpv4WithPrefixlen());
+            case IPV6_WITH_PREFIXLEN ->
+                    applyFlag(b, StringFormat.IPV6_WITH_PREFIXLEN, r.getIpv6WithPrefixlen());
+            case PROTOBUF_FQN -> applyFlag(b, StringFormat.PROTOBUF_FQN, r.getProtobufFqn());
+            case PROTOBUF_DOT_FQN -> applyFlag(b, StringFormat.PROTOBUF_DOT_FQN, r.getProtobufDotFqn());
             default -> {
-                // *_with_prefixlen: no core evaluator yet — skipped.
             }
         }
         boolean strict = !r.hasStrict() || r.getStrict();

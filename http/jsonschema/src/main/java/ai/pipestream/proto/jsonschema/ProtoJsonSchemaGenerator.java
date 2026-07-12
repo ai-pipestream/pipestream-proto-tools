@@ -390,8 +390,10 @@ public final class ProtoJsonSchemaGenerator {
                 case IPV6 -> "ipv6";
                 case IP -> schemaOf("anyOf", List.of(
                         schemaOf("format", "ipv4"), schemaOf("format", "ipv6")));
-                // No standard JSON Schema format keyword — surface the format name descriptively.
-                case TUUID, ULID, ADDRESS, IP_PREFIX, IPV4_PREFIX, IPV6_PREFIX, HOST_AND_PORT ->
+                // No standard JSON Schema format keyword: surface the format name descriptively.
+                case TUUID, ULID, ADDRESS, IP_PREFIX, IPV4_PREFIX, IPV6_PREFIX, HOST_AND_PORT,
+                        IP_WITH_PREFIXLEN, IPV4_WITH_PREFIXLEN, IPV6_WITH_PREFIXLEN,
+                        PROTOBUF_FQN, PROTOBUF_DOT_FQN ->
                         schemaOf("x-pipestream-format", format.ruleId());
             };
         }

@@ -27,6 +27,16 @@ public enum StringFormat {
     IP_PREFIX("string.ip_prefix", "value must be a valid IP prefix", v -> Formats.isIpPrefix(v, 0, true)),
     IPV4_PREFIX("string.ipv4_prefix", "value must be a valid IPv4 prefix", v -> Formats.isIpPrefix(v, 4, true)),
     IPV6_PREFIX("string.ipv6_prefix", "value must be a valid IPv6 prefix", v -> Formats.isIpPrefix(v, 6, true)),
+    IP_WITH_PREFIXLEN("string.ip_with_prefixlen", "value must be a valid IP address with prefix length",
+            v -> Formats.isIpWithPrefixLen(v, 0)),
+    IPV4_WITH_PREFIXLEN("string.ipv4_with_prefixlen", "value must be a valid IPv4 address with prefix length",
+            v -> Formats.isIpWithPrefixLen(v, 4)),
+    IPV6_WITH_PREFIXLEN("string.ipv6_with_prefixlen", "value must be a valid IPv6 address with prefix length",
+            v -> Formats.isIpWithPrefixLen(v, 6)),
+    PROTOBUF_FQN("string.protobuf_fqn", "value must be a valid protobuf fully-qualified name",
+            Formats::isProtobufFqn),
+    PROTOBUF_DOT_FQN("string.protobuf_dot_fqn", "value must be a valid protobuf fully-qualified name",
+            Formats::isProtobufDotFqn),
     HOST_AND_PORT("string.host_and_port", "value must be a valid host and port pair",
             v -> Formats.isHostAndPort(v, true));
 

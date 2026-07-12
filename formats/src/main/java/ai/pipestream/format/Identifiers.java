@@ -13,6 +13,12 @@ public final class Identifiers {
     private static final Pattern TUUID = Pattern.compile("[0-9a-fA-F]{32}");
     // 26 chars, Crockford base-32 excluding I, L, O, U; first char <= 7 so it fits 128 bits.
     private static final Pattern ULID = Pattern.compile("[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}");
+    // A protobuf identifier: a letter or underscore followed by letters, digits, underscores.
+    private static final String IDENT = "[A-Za-z_][A-Za-z0-9_]*";
+    // A fully-qualified protobuf name: dot-separated identifiers, no leading/trailing/double dots.
+    private static final Pattern PROTOBUF_FQN = Pattern.compile(IDENT + "(\\." + IDENT + ")*");
+    // The absolute form: the same, but with a leading dot.
+    private static final Pattern PROTOBUF_DOT_FQN = Pattern.compile("(\\." + IDENT + ")+");
 
     private Identifiers() {
     }
@@ -30,5 +36,15 @@ public final class Identifiers {
     /** ULID: 26 Crockford base-32 characters. */
     public static boolean isUlid(String value) {
         return ULID.matcher(value).matches();
+    }
+
+    /** A fully-qualified protobuf name, e.g. {@code foo.bar.Baz} (no leading dot). */
+    public static boolean isProtobufFqn(String value) {
+        return PROTOBUF_FQN.matcher(value).matches();
+    }
+
+    /** The absolute (leading-dot) fully-qualified protobuf name, e.g. {@code .foo.bar.Baz}. */
+    public static boolean isProtobufDotFqn(String value) {
+        return PROTOBUF_DOT_FQN.matcher(value).matches();
     }
 }

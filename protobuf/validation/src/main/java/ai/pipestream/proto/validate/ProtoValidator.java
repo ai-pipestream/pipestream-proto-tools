@@ -112,6 +112,7 @@ public final class ProtoValidator {
     private static CelEnvironmentFactory celEnv() {
         return CelEnvironmentFactory.builder()
                 .addVar("this")
+                .addVar("now")
                 .addFunctions(ValidationCelFunctions.declarations(), ValidationCelFunctions.bindings());
     }
 
@@ -405,6 +406,21 @@ public final class ProtoValidator {
         if (rules.maxLen().isPresent() && len > rules.maxLen().getAsLong()) {
             violations.add(violation(path, "string.max_len",
                     "length must be at most " + rules.maxLen().getAsLong()));
+        }
+        if (rules.lenBytes().isPresent() || rules.minBytes().isPresent() || rules.maxBytes().isPresent()) {
+            long bytes = value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            if (rules.lenBytes().isPresent() && bytes != rules.lenBytes().getAsLong()) {
+                violations.add(violation(path, "string.len_bytes",
+                        "must be exactly " + rules.lenBytes().getAsLong() + " bytes"));
+            }
+            if (rules.minBytes().isPresent() && bytes < rules.minBytes().getAsLong()) {
+                violations.add(violation(path, "string.min_bytes",
+                        "must be at least " + rules.minBytes().getAsLong() + " bytes"));
+            }
+            if (rules.maxBytes().isPresent() && bytes > rules.maxBytes().getAsLong()) {
+                violations.add(violation(path, "string.max_bytes",
+                        "must be at most " + rules.maxBytes().getAsLong() + " bytes"));
+            }
         }
         if (rules.pattern().isPresent()) {
             try {
@@ -818,7 +834,11 @@ public final class ProtoValidator {
         }
         String id = rule.id().isBlank() ? "cel" : rule.id();
         try {
-            Object result = evaluator.evaluateValue(rule.expression(), Map.of("this", thisValue));
+            Map<String, Object> bindings = new java.util.HashMap<>();
+            bindings.put("this", thisValue);
+            // protovalidate exposes the current time as `now`; a single value keeps now == now true.
+            bindings.put("now", java.time.Instant.now());
+            Object result = evaluator.evaluateValue(rule.expression(), bindings);
             if (result instanceof Boolean ok) {
                 if (!ok) {
                     String msg = rule.message().isBlank() ? "CEL rule failed" : rule.message();

@@ -17,6 +17,9 @@ public record StringConstraints(
         OptionalLong len,
         OptionalLong minLen,
         OptionalLong maxLen,
+        OptionalLong lenBytes,
+        OptionalLong minBytes,
+        OptionalLong maxBytes,
         Optional<String> pattern,
         Optional<String> prefix,
         Optional<String> suffix,
@@ -32,6 +35,9 @@ public record StringConstraints(
         Objects.requireNonNull(len, "len");
         Objects.requireNonNull(minLen, "minLen");
         Objects.requireNonNull(maxLen, "maxLen");
+        Objects.requireNonNull(lenBytes, "lenBytes");
+        Objects.requireNonNull(minBytes, "minBytes");
+        Objects.requireNonNull(maxBytes, "maxBytes");
         Objects.requireNonNull(pattern, "pattern");
         Objects.requireNonNull(prefix, "prefix");
         Objects.requireNonNull(suffix, "suffix");
@@ -47,6 +53,7 @@ public record StringConstraints(
     /** True when no string constraint is actually set (safe to skip). */
     public boolean isEmpty() {
         return constant.isEmpty() && len.isEmpty() && minLen.isEmpty() && maxLen.isEmpty()
+                && lenBytes.isEmpty() && minBytes.isEmpty() && maxBytes.isEmpty()
                 && pattern.isEmpty() && prefix.isEmpty() && suffix.isEmpty()
                 && contains.isEmpty() && notContains.isEmpty()
                 && in.isEmpty() && notIn.isEmpty() && formats.isEmpty() && httpHeader.isEmpty();
@@ -61,6 +68,9 @@ public record StringConstraints(
         private OptionalLong len = OptionalLong.empty();
         private OptionalLong minLen = OptionalLong.empty();
         private OptionalLong maxLen = OptionalLong.empty();
+        private OptionalLong lenBytes = OptionalLong.empty();
+        private OptionalLong minBytes = OptionalLong.empty();
+        private OptionalLong maxBytes = OptionalLong.empty();
         private Optional<String> pattern = Optional.empty();
         private Optional<String> prefix = Optional.empty();
         private Optional<String> suffix = Optional.empty();
@@ -88,6 +98,21 @@ public record StringConstraints(
 
         public Builder maxLen(long maxLen) {
             this.maxLen = OptionalLong.of(maxLen);
+            return this;
+        }
+
+        public Builder lenBytes(long lenBytes) {
+            this.lenBytes = OptionalLong.of(lenBytes);
+            return this;
+        }
+
+        public Builder minBytes(long minBytes) {
+            this.minBytes = OptionalLong.of(minBytes);
+            return this;
+        }
+
+        public Builder maxBytes(long maxBytes) {
+            this.maxBytes = OptionalLong.of(maxBytes);
             return this;
         }
 
@@ -137,8 +162,8 @@ public record StringConstraints(
         }
 
         public StringConstraints build() {
-            return new StringConstraints(constant, len, minLen, maxLen, pattern,
-                    prefix, suffix, contains, notContains, in, notIn, formats, httpHeader);
+            return new StringConstraints(constant, len, minLen, maxLen, lenBytes, minBytes, maxBytes,
+                    pattern, prefix, suffix, contains, notContains, in, notIn, formats, httpHeader);
         }
     }
 }

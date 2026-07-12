@@ -82,6 +82,21 @@ public final class Formats {
         return Identifiers.isUlid(value);
     }
 
+    /** A fully-qualified protobuf name, e.g. {@code foo.bar.Baz}. */
+    public static boolean isProtobufFqn(String value) {
+        return Identifiers.isProtobufFqn(value);
+    }
+
+    /** The absolute (leading-dot) fully-qualified protobuf name, e.g. {@code .foo.bar.Baz}. */
+    public static boolean isProtobufDotFqn(String value) {
+        return Identifiers.isProtobufDotFqn(value);
+    }
+
+    /** An IP address carrying a prefix length ({@code 192.168.1.1/24}); host bits may be set. */
+    public static boolean isIpWithPrefixLen(String value, long version) {
+        return IpAddresses.isIpPrefix(value, (int) version, false);
+    }
+
     /** A hostname or an IP address. */
     public static boolean isAddress(String value) {
         return Hostnames.isHostname(value) || IpAddresses.isIp(value, 0);
