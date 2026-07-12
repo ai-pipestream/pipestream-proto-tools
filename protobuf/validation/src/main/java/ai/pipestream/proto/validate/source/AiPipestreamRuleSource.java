@@ -370,6 +370,7 @@ public final class AiPipestreamRuleSource implements ValidationRuleSource {
 
     private static TimestampConstraints toTimestamp(TimestampRules r) {
         return new TimestampConstraints(
+                Optional.empty(),
                 r.hasGt() ? Optional.of(toInstant(r.getGt())) : Optional.empty(),
                 r.hasGte() ? Optional.of(toInstant(r.getGte())) : Optional.empty(),
                 r.hasLt() ? Optional.of(toInstant(r.getLt())) : Optional.empty(),
@@ -381,10 +382,13 @@ public final class AiPipestreamRuleSource implements ValidationRuleSource {
 
     private static DurationConstraints toDuration(DurationRules r) {
         return new DurationConstraints(
+                Optional.empty(),
                 r.hasGt() ? Optional.of(toJavaDuration(r.getGt())) : Optional.empty(),
                 r.hasGte() ? Optional.of(toJavaDuration(r.getGte())) : Optional.empty(),
                 r.hasLt() ? Optional.of(toJavaDuration(r.getLt())) : Optional.empty(),
-                r.hasLte() ? Optional.of(toJavaDuration(r.getLte())) : Optional.empty());
+                r.hasLte() ? Optional.of(toJavaDuration(r.getLte())) : Optional.empty(),
+                java.util.List.of(),
+                java.util.List.of());
     }
 
     private static Instant toInstant(com.google.protobuf.Timestamp ts) {

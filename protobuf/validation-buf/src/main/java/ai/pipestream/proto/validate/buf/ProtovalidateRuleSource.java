@@ -260,7 +260,10 @@ public final class ProtovalidateRuleSource implements ValidationRuleSource {
             case MAP -> builder.map(toMap(rules.getMap()));
             case TIMESTAMP -> builder.timestamp(toTimestamp(rules.getTimestamp()));
             case DURATION -> builder.duration(toDuration(rules.getDuration()));
-            case ANY, FIELD_MASK, TYPE_NOT_SET -> {
+            case ANY -> builder.any(new ai.pipestream.proto.validate.model.AnyConstraints(
+                    rules.getAny().getInList(), rules.getAny().getNotInList()));
+            case FIELD_MASK -> builder.fieldMask(toFieldMask(rules.getFieldMask()));
+            case TYPE_NOT_SET -> {
             }
         }
         for (Rule cel : rules.getCelList()) {
@@ -271,6 +274,14 @@ public final class ProtovalidateRuleSource implements ValidationRuleSource {
 
     private static CelConstraint toCel(Rule rule) {
         return new CelConstraint(rule.getId(), rule.getExpression(), rule.getMessage());
+    }
+
+    private static ai.pipestream.proto.validate.model.FieldMaskConstraints toFieldMask(
+            build.buf.validate.FieldMaskRules r) {
+        return new ai.pipestream.proto.validate.model.FieldMaskConstraints(
+                r.hasConst() ? Optional.of(String.join(",", r.getConst().getPathsList())) : Optional.empty(),
+                r.getInList(),
+                r.getNotInList());
     }
 
     private static StringConstraints toStringConstraints(StringRules r) {
@@ -698,32 +709,26 @@ public final class ProtovalidateRuleSource implements ValidationRuleSource {
     }
 
     private static TimestampConstraints toTimestamp(TimestampRules r) {
-        // const translates to equal lower and upper bounds.
-        Optional<Instant> constant = r.hasConst()
-                ? Optional.of(toInstant(r.getConst())) : Optional.empty();
         return new TimestampConstraints(
+                r.hasConst() ? Optional.of(toInstant(r.getConst())) : Optional.empty(),
                 r.hasGt() ? Optional.of(toInstant(r.getGt())) : Optional.empty(),
-                constant.or(() -> r.hasGte()
-                        ? Optional.of(toInstant(r.getGte())) : Optional.empty()),
+                r.hasGte() ? Optional.of(toInstant(r.getGte())) : Optional.empty(),
                 r.hasLt() ? Optional.of(toInstant(r.getLt())) : Optional.empty(),
-                constant.or(() -> r.hasLte()
-                        ? Optional.of(toInstant(r.getLte())) : Optional.empty()),
+                r.hasLte() ? Optional.of(toInstant(r.getLte())) : Optional.empty(),
                 r.getLtNow(),
                 r.getGtNow(),
                 r.hasWithin() ? Optional.of(toJavaDuration(r.getWithin())) : Optional.empty());
     }
 
     private static DurationConstraints toDuration(DurationRules r) {
-        // const translates to equal lower and upper bounds; in / not_in are skipped.
-        Optional<java.time.Duration> constant = r.hasConst()
-                ? Optional.of(toJavaDuration(r.getConst())) : Optional.empty();
         return new DurationConstraints(
+                r.hasConst() ? Optional.of(toJavaDuration(r.getConst())) : Optional.empty(),
                 r.hasGt() ? Optional.of(toJavaDuration(r.getGt())) : Optional.empty(),
-                constant.or(() -> r.hasGte()
-                        ? Optional.of(toJavaDuration(r.getGte())) : Optional.empty()),
+                r.hasGte() ? Optional.of(toJavaDuration(r.getGte())) : Optional.empty(),
                 r.hasLt() ? Optional.of(toJavaDuration(r.getLt())) : Optional.empty(),
-                constant.or(() -> r.hasLte()
-                        ? Optional.of(toJavaDuration(r.getLte())) : Optional.empty()));
+                r.hasLte() ? Optional.of(toJavaDuration(r.getLte())) : Optional.empty(),
+                r.getInList().stream().map(ProtovalidateRuleSource::toJavaDuration).toList(),
+                r.getNotInList().stream().map(ProtovalidateRuleSource::toJavaDuration).toList());
     }
 
     private static Instant toInstant(com.google.protobuf.Timestamp ts) {

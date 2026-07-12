@@ -12,6 +12,7 @@ import java.util.Optional;
  * validation time.
  */
 public record TimestampConstraints(
+        Optional<Instant> constant,
         Optional<Instant> gt,
         Optional<Instant> gte,
         Optional<Instant> lt,
@@ -21,6 +22,7 @@ public record TimestampConstraints(
         Optional<Duration> within) {
 
     public TimestampConstraints {
+        Objects.requireNonNull(constant, "constant");
         Objects.requireNonNull(gt, "gt");
         Objects.requireNonNull(gte, "gte");
         Objects.requireNonNull(lt, "lt");
@@ -29,7 +31,7 @@ public record TimestampConstraints(
     }
 
     public boolean isEmpty() {
-        return gt.isEmpty() && gte.isEmpty() && lt.isEmpty() && lte.isEmpty()
+        return constant.isEmpty() && gt.isEmpty() && gte.isEmpty() && lt.isEmpty() && lte.isEmpty()
                 && !ltNow && !gtNow && within.isEmpty();
     }
 }

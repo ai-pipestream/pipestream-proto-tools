@@ -29,6 +29,8 @@ public record FieldConstraints(
         Optional<MapConstraints> map,
         Optional<TimestampConstraints> timestamp,
         Optional<DurationConstraints> duration,
+        Optional<AnyConstraints> any,
+        Optional<FieldMaskConstraints> fieldMask,
         List<CelConstraint> cel) {
 
     public FieldConstraints {
@@ -43,6 +45,8 @@ public record FieldConstraints(
         Objects.requireNonNull(map, "map");
         Objects.requireNonNull(timestamp, "timestamp");
         Objects.requireNonNull(duration, "duration");
+        Objects.requireNonNull(any, "any");
+        Objects.requireNonNull(fieldMask, "fieldMask");
         cel = List.copyOf(Objects.requireNonNull(cel, "cel"));
     }
 
@@ -64,6 +68,8 @@ public record FieldConstraints(
         private MapConstraints map;
         private TimestampConstraints timestamp;
         private DurationConstraints duration;
+        private AnyConstraints any;
+        private FieldMaskConstraints fieldMask;
         private final List<CelConstraint> cel = new ArrayList<>();
 
         public Builder required(boolean required) {
@@ -126,6 +132,16 @@ public record FieldConstraints(
             return this;
         }
 
+        public Builder any(AnyConstraints any) {
+            this.any = (any == null || any.isEmpty()) ? null : any;
+            return this;
+        }
+
+        public Builder fieldMask(FieldMaskConstraints fieldMask) {
+            this.fieldMask = (fieldMask == null || fieldMask.isEmpty()) ? null : fieldMask;
+            return this;
+        }
+
         public Builder addCel(CelConstraint constraint) {
             cel.add(Objects.requireNonNull(constraint, "constraint"));
             return this;
@@ -145,6 +161,8 @@ public record FieldConstraints(
                     Optional.ofNullable(map),
                     Optional.ofNullable(timestamp),
                     Optional.ofNullable(duration),
+                    Optional.ofNullable(any),
+                    Optional.ofNullable(fieldMask),
                     List.copyOf(cel));
         }
     }

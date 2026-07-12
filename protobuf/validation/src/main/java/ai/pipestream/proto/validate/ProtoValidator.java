@@ -344,6 +344,11 @@ public final class ProtoValidator {
                 } else if (DURATION_TYPE.equals(type)) {
                     constraints.duration().ifPresent(d ->
                             applyDuration(d, toJavaDuration((Message) value), path, violations));
+                } else if ("google.protobuf.Any".equals(type)) {
+                    constraints.any().ifPresent(a -> applyAny(a, (Message) value, path, violations));
+                } else if ("google.protobuf.FieldMask".equals(type)) {
+                    constraints.fieldMask().ifPresent(fm ->
+                            applyFieldMask(fm, (Message) value, path, violations));
                 } else {
                     // Well-known wrapper types (Int32Value, StringValue, …) apply their scalar rules
                     // to the wrapped value; the field is present (message presence) so this only runs
@@ -357,6 +362,37 @@ public final class ProtoValidator {
                     }
                 }
             }
+        }
+    }
+
+    /** {@code google.protobuf.Any}: its type URL must be allowed by {@code in}/{@code not_in}. */
+    private static void applyAny(
+            ai.pipestream.proto.validate.model.AnyConstraints rules, Message any, String path,
+            List<ValidationResult.Violation> violations) {
+        String typeUrl = (String) any.getField(any.getDescriptorForType().findFieldByNumber(1));
+        if (!rules.in().isEmpty() && !rules.in().contains(typeUrl)) {
+            violations.add(violation(path, "any.in", "type URL must be one of the allowed values"));
+        }
+        if (!rules.notIn().isEmpty() && rules.notIn().contains(typeUrl)) {
+            violations.add(violation(path, "any.not_in", "type URL must not be a forbidden value"));
+        }
+    }
+
+    /** {@code google.protobuf.FieldMask}: compare the mask in its comma-joined path form. */
+    private static void applyFieldMask(
+            ai.pipestream.proto.validate.model.FieldMaskConstraints rules, Message mask, String path,
+            List<ValidationResult.Violation> violations) {
+        @SuppressWarnings("unchecked")
+        List<String> paths = (List<String>) mask.getField(mask.getDescriptorForType().findFieldByNumber(1));
+        String value = String.join(",", paths);
+        if (rules.constant().isPresent() && !value.equals(rules.constant().get())) {
+            violations.add(violation(path, "field_mask.const", "must equal the required field mask"));
+        }
+        if (!rules.in().isEmpty() && !rules.in().contains(value)) {
+            violations.add(violation(path, "field_mask.in", "must be one of the allowed values"));
+        }
+        if (!rules.notIn().isEmpty() && rules.notIn().contains(value)) {
+            violations.add(violation(path, "field_mask.not_in", "must not be one of the forbidden values"));
         }
     }
 
@@ -720,6 +756,9 @@ public final class ProtoValidator {
             TimestampConstraints rules, Instant value, String path,
             List<ValidationResult.Violation> violations) {
         Instant now = Instant.now();
+        if (rules.constant().isPresent() && !value.equals(rules.constant().get())) {
+            violations.add(violation(path, "timestamp.const", "must equal " + rules.constant().get()));
+        }
         applyRange("timestamp", path, value,
                 rules.gt().orElse(null), rules.gte().orElse(null),
                 rules.lt().orElse(null), rules.lte().orElse(null),
@@ -742,10 +781,20 @@ public final class ProtoValidator {
     private static void applyDuration(
             DurationConstraints rules, Duration value, String path,
             List<ValidationResult.Violation> violations) {
+        if (rules.constant().isPresent() && !value.equals(rules.constant().get())) {
+            violations.add(violation(path, "duration.const",
+                    "must equal " + rules.constant().get()));
+        }
         applyRange("duration", path, value,
                 rules.gt().orElse(null), rules.gte().orElse(null),
                 rules.lt().orElse(null), rules.lte().orElse(null),
                 Comparator.naturalOrder(), Duration::toString, violations);
+        if (!rules.in().isEmpty() && !rules.in().contains(value)) {
+            violations.add(violation(path, "duration.in", "must be one of the allowed values"));
+        }
+        if (!rules.notIn().isEmpty() && rules.notIn().contains(value)) {
+            violations.add(violation(path, "duration.not_in", "must not be one of the forbidden values"));
+        }
     }
 
     private static Instant toInstant(Message timestamp) {
