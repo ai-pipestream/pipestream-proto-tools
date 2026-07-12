@@ -7,6 +7,7 @@ description = 'Protobuf validation standard — CEL-driven field and message con
 dependencies {
     api project(':pipestream-proto-tools-mapper-cel')
     api libs.protobuf.java
+    implementation project(':pipestream-proto-tools-formats')
 }
 
 protobuf {

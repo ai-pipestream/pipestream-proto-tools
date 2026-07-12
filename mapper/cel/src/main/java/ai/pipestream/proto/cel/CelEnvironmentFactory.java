@@ -4,8 +4,11 @@ import com.google.protobuf.Descriptors.Descriptor;
 import dev.cel.bundle.Cel;
 import dev.cel.bundle.CelBuilder;
 import dev.cel.bundle.CelFactory;
+import dev.cel.common.CelFunctionDecl;
 import dev.cel.common.types.CelType;
 import dev.cel.common.types.SimpleType;
+import dev.cel.parser.CelStandardMacro;
+import dev.cel.runtime.CelFunctionBinding;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,6 +20,8 @@ import java.util.Objects;
 public final class CelEnvironmentFactory {
     private final List<Descriptor> messageTypes = new ArrayList<>();
     private final Map<String, CelType> variables = new LinkedHashMap<>();
+    private final List<CelFunctionDecl> functionDeclarations = new ArrayList<>();
+    private final List<CelFunctionBinding> functionBindings = new ArrayList<>();
 
     public CelEnvironmentFactory() {
     }
@@ -39,11 +44,30 @@ public final class CelEnvironmentFactory {
         return this;
     }
 
+    /**
+     * Registers a custom function library: the declarations are added to the compiler and the
+     * bindings to the runtime, so callers can extend the environment with domain-specific functions
+     * (e.g. the validation format functions) without this module owning their semantics.
+     */
+    public CelEnvironmentFactory addFunctions(
+            Iterable<CelFunctionDecl> declarations, Iterable<CelFunctionBinding> bindings) {
+        declarations.forEach(functionDeclarations::add);
+        bindings.forEach(functionBindings::add);
+        return this;
+    }
+
     /** Returns a builder for callers that need additional typed CEL declarations. */
     public CelBuilder advisoryBuilder() {
         CelBuilder builder = CelFactory.standardCelBuilder();
+        builder.setStandardMacros(CelStandardMacro.STANDARD_MACROS);
         builder.addMessageTypes(messageTypes);
         variables.forEach(builder::addVar);
+        if (!functionDeclarations.isEmpty()) {
+            builder.addFunctionDeclarations(functionDeclarations);
+        }
+        if (!functionBindings.isEmpty()) {
+            builder.addFunctionBindings(functionBindings);
+        }
         return builder;
     }
 

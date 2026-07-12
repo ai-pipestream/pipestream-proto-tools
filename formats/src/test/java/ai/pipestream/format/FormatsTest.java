@@ -1,0 +1,124 @@
+package ai.pipestream.format;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class FormatsTest {
+
+    @Test
+    void hostnames() {
+        assertThat(Formats.isHostname("example.com")).isTrue();
+        assertThat(Formats.isHostname("foo-bar.example.com")).isTrue();
+        assertThat(Formats.isHostname("example.com.")).isTrue();      // trailing dot allowed
+        assertThat(Formats.isHostname("a.b.c.d.e.f")).isTrue();
+        assertThat(Formats.isHostname("xn--nxasmq6b.example")).isTrue();
+
+        assertThat(Formats.isHostname("")).isFalse();
+        assertThat(Formats.isHostname("-leading.com")).isFalse();
+        assertThat(Formats.isHostname("trailing-.com")).isFalse();
+        assertThat(Formats.isHostname("under_score.com")).isFalse();
+        assertThat(Formats.isHostname("double..dot")).isFalse();
+        assertThat(Formats.isHostname("1.2.3.4")).isFalse();          // all-numeric TLD
+        assertThat(Formats.isHostname("a".repeat(64) + ".com")).isFalse(); // label > 63
+    }
+
+    @Test
+    void emails() {
+        assertThat(Formats.isEmail("user@example.com")).isTrue();
+        assertThat(Formats.isEmail("first.last+tag@sub.example.co")).isTrue();
+        assertThat(Formats.isEmail("a!#$%&'*+/=?^_`{|}~-@example.com")).isTrue();
+
+        assertThat(Formats.isEmail("no-at-sign")).isFalse();
+        assertThat(Formats.isEmail("two@@example.com")).isFalse();
+        assertThat(Formats.isEmail("space in@example.com")).isFalse();
+        assertThat(Formats.isEmail("trailingdot@example.com.")).isFalse();
+    }
+
+    @Test
+    void ipv4() {
+        assertThat(Formats.isIp("192.168.0.1", 4)).isTrue();
+        assertThat(Formats.isIp("0.0.0.0", 4)).isTrue();
+        assertThat(Formats.isIp("255.255.255.255", 4)).isTrue();
+
+        assertThat(Formats.isIp("192.168.0.1", 6)).isFalse();
+        assertThat(Formats.isIp("256.0.0.1", 4)).isFalse();
+        assertThat(Formats.isIp("01.2.3.4", 4)).isFalse();           // leading zero
+        assertThat(Formats.isIp("1.2.3", 4)).isFalse();
+        assertThat(Formats.isIp("1.2.3.4.5", 4)).isFalse();
+    }
+
+    @Test
+    void ipv6() {
+        assertThat(Formats.isIp("::1", 6)).isTrue();
+        assertThat(Formats.isIp("::", 6)).isTrue();
+        assertThat(Formats.isIp("2001:db8::1", 6)).isTrue();
+        assertThat(Formats.isIp("2001:0db8:0000:0000:0000:0000:0000:0001", 6)).isTrue();
+        assertThat(Formats.isIp("::ffff:192.168.0.1", 6)).isTrue();  // embedded IPv4
+        assertThat(Formats.isIp("fe80::1", 6)).isTrue();
+
+        assertThat(Formats.isIp("2001:db8::1::2", 6)).isFalse();     // two "::"
+        assertThat(Formats.isIp("2001:db8:0:0:0:0:0:0:1", 6)).isFalse(); // 9 groups
+        assertThat(Formats.isIp("12345::", 6)).isFalse();            // hextet too long
+        assertThat(Formats.isIp("::ffff:999.1.1.1", 6)).isFalse();   // bad embedded IPv4
+        assertThat(Formats.isIp("1:2:3:4:5:6:7:8::", 6)).isFalse();  // "::" compresses nothing
+    }
+
+    @Test
+    void ipPrefix() {
+        assertThat(Formats.isIpPrefix("192.168.0.0/24", 4, false)).isTrue();
+        assertThat(Formats.isIpPrefix("192.168.0.0/24", 4, true)).isTrue();   // host bits zero
+        assertThat(Formats.isIpPrefix("192.168.0.1/24", 4, false)).isTrue();
+        assertThat(Formats.isIpPrefix("192.168.0.1/24", 4, true)).isFalse();  // host bits set
+        assertThat(Formats.isIpPrefix("2001:db8::/32", 6, true)).isTrue();
+        assertThat(Formats.isIpPrefix("2001:db8::1/32", 6, true)).isFalse();
+
+        assertThat(Formats.isIpPrefix("192.168.0.0/33", 4, false)).isFalse(); // bits > 32
+        assertThat(Formats.isIpPrefix("192.168.0.0", 4, false)).isFalse();    // no prefix
+    }
+
+    @Test
+    void uris() {
+        assertThat(Formats.isUri("https://example.com/path?q=1#frag")).isTrue();
+        assertThat(Formats.isUri("ftp://user@host:21/dir/file")).isTrue();
+        assertThat(Formats.isUri("urn:oasis:names:specification:docbook:dtd:xml:4.1.2")).isTrue();
+        assertThat(Formats.isUri("mailto:someone@example.com")).isTrue();
+        assertThat(Formats.isUri("file:///etc/hosts")).isTrue();
+        assertThat(Formats.isUri("http://[2001:db8::1]:8080/")).isTrue();
+        assertThat(Formats.isUri("foo://info.example.com?token=a%20b")).isTrue();
+
+        assertThat(Formats.isUri("/relative/path")).isFalse();       // no scheme
+        assertThat(Formats.isUri("http://exa mple.com")).isFalse();  // space in host
+        assertThat(Formats.isUri("http://example.com/%zz")).isFalse(); // bad pct-encoding
+        assertThat(Formats.isUri("1http://example.com")).isFalse();  // scheme starts with digit
+    }
+
+    @Test
+    void uriReferences() {
+        assertThat(Formats.isUriRef("https://example.com")).isTrue();
+        assertThat(Formats.isUriRef("//example.com/path")).isTrue(); // network-path reference
+        assertThat(Formats.isUriRef("/absolute/path")).isTrue();
+        assertThat(Formats.isUriRef("relative/path")).isTrue();
+        assertThat(Formats.isUriRef("../up")).isTrue();
+        assertThat(Formats.isUriRef("")).isTrue();                   // empty same-document ref
+        assertThat(Formats.isUriRef("?query-only")).isTrue();
+        assertThat(Formats.isUriRef("#fragment-only")).isTrue();
+
+        assertThat(Formats.isUriRef("http://exa mple.com")).isFalse();
+        assertThat(Formats.isUriRef("path/%2")).isFalse();           // truncated pct-encoding
+    }
+
+    @Test
+    void hostAndPort() {
+        assertThat(Formats.isHostAndPort("example.com:8080", true)).isTrue();
+        assertThat(Formats.isHostAndPort("example.com", false)).isTrue();
+        assertThat(Formats.isHostAndPort("192.168.0.1:443", true)).isTrue();
+        assertThat(Formats.isHostAndPort("[::1]:80", true)).isTrue();
+        assertThat(Formats.isHostAndPort("[2001:db8::1]", false)).isTrue();
+
+        assertThat(Formats.isHostAndPort("example.com", true)).isFalse();     // port required
+        assertThat(Formats.isHostAndPort("example.com:99999", true)).isFalse(); // port > 65535
+        assertThat(Formats.isHostAndPort("example.com:0080", true)).isFalse(); // leading zero
+        assertThat(Formats.isHostAndPort("", false)).isFalse();
+    }
+}

@@ -14,6 +14,9 @@ rootProject.name = 'pipestream-proto-tools'
 
 include 'bom'
 
+include 'pipestream-proto-tools-formats'
+project(':pipestream-proto-tools-formats').projectDir = file('formats')
+
 include 'pipestream-proto-tools-descriptors'
 project(':pipestream-proto-tools-descriptors').projectDir = file('core/descriptors')
 

@@ -3,6 +3,7 @@ package ai.pipestream.proto.validate;
 import ai.pipestream.proto.cel.CelEnvironmentFactory;
 import ai.pipestream.proto.cel.CelEvaluationException;
 import ai.pipestream.proto.cel.CelEvaluator;
+import ai.pipestream.proto.validate.cel.ValidationCelFunctions;
 import ai.pipestream.proto.validate.model.BoolConstraints;
 import ai.pipestream.proto.validate.model.BytesConstraints;
 import ai.pipestream.proto.validate.model.CelConstraint;
@@ -84,13 +85,19 @@ public final class ProtoValidator {
 
     /** As {@link #create()} but with an explicit rule-source chain. */
     public static ProtoValidator create(List<ValidationRuleSource> sources) {
-        CelEvaluator field = new CelEvaluator(CelEnvironmentFactory.builder()
-                .addVar("this")
-                .build());
-        CelEvaluator message = new CelEvaluator(CelEnvironmentFactory.builder()
-                .addVar("this")
-                .build());
+        CelEvaluator field = new CelEvaluator(celEnv().build());
+        CelEvaluator message = new CelEvaluator(celEnv().build());
         return new ProtoValidator(field, message, sources);
+    }
+
+    /**
+     * A CEL environment with {@code this} bound and the format standard-library functions
+     * (isHostname/isEmail/isIp/isIpPrefix/isUri/isUriRef/isHostAndPort/isNan/isInf) registered.
+     */
+    private static CelEnvironmentFactory celEnv() {
+        return CelEnvironmentFactory.builder()
+                .addVar("this")
+                .addFunctions(ValidationCelFunctions.declarations(), ValidationCelFunctions.bindings());
     }
 
     /**
@@ -105,13 +112,8 @@ public final class ProtoValidator {
     public static ProtoValidator forMessageType(
             Descriptor descriptor, List<ValidationRuleSource> sources) {
         Objects.requireNonNull(descriptor, "descriptor");
-        CelEvaluator field = new CelEvaluator(CelEnvironmentFactory.builder()
-                .addVar("this")
-                .build());
-        CelEvaluator message = new CelEvaluator(CelEnvironmentFactory.builder()
-                .addMessageType(descriptor)
-                .addVar("this")
-                .build());
+        CelEvaluator field = new CelEvaluator(celEnv().build());
+        CelEvaluator message = new CelEvaluator(celEnv().addMessageType(descriptor).build());
         return new ProtoValidator(field, message, sources);
     }
 
