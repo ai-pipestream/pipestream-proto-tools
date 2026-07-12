@@ -1,4 +1,4 @@
-description = 'Netty host scaffold for protobuf JSON/REST'
+description = 'Netty host for protobuf JSON/REST'
 
 dependencies {
     api project(':pipestream-proto-tools-server-common')

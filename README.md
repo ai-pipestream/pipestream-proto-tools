@@ -191,7 +191,7 @@ Same {@code ProtoRestGateway} surface; pick a host artifact:
 |---|---|
 | `…-server-jdk` | Default — JDK {@code HttpServer}, zero HTTP deps |
 | `…-server-vertx` | **Vert.x 5** (Quarkus 3.x is still Vert.x 4) |
-| `…-server-netty` | Scaffold — full Netty pipeline next |
+| `…-server-netty` | **Netty 4.2** (HttpServerCodec + aggregator pipeline) |
 | `…-server-spring` / `…-micronaut` / `…-server-quarkus` | Framework adapters |
 
 ```java
