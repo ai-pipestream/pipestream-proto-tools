@@ -11,6 +11,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
@@ -23,24 +24,50 @@ import java.util.Objects;
  * {@link ConfluentSchemaRegistryLoader}. This source remains the right choice for
  * endpoints that supply a compiled FileDescriptorSet, or for a classpath
  * descriptor-set export produced from the registered schema.</p>
+ *
+ * <p>HTTP requests use configurable timeouts (defaults: 10s connect, 30s per request), so an
+ * unresponsive endpoint cannot hang startup forever. The source owns its {@link HttpClient};
+ * call {@link #close()} when done with an HTTP-backed instance (a no-op for classpath-backed
+ * instances).</p>
  */
-public final class ConfluentDescriptorSource implements DescriptorLoader {
+public final class ConfluentDescriptorSource implements DescriptorLoader, AutoCloseable {
+
+    /** Default connect timeout for the HTTP client. */
+    public static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
+
+    /** Default per-request timeout. */
+    public static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
+
     private final URI endpoint;
     private final String classpathResource;
     private final HttpClient client;
+    private final Duration requestTimeout;
 
     public ConfluentDescriptorSource(URI endpoint) {
-        this(endpoint, null, HttpClient.newHttpClient());
+        this(endpoint, DEFAULT_CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT);
+    }
+
+    /**
+     * Creates an HTTP-backed source with explicit timeouts.
+     *
+     * @param endpoint URL serving a binary {@code FileDescriptorSet}
+     * @param connectTimeout TCP connect timeout for the underlying {@link HttpClient}
+     * @param requestTimeout per-request timeout
+     */
+    public ConfluentDescriptorSource(URI endpoint, Duration connectTimeout, Duration requestTimeout) {
+        this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
+        this.classpathResource = null;
+        this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout");
+        this.client = HttpClient.newBuilder()
+                .connectTimeout(Objects.requireNonNull(connectTimeout, "connectTimeout"))
+                .build();
     }
 
     public ConfluentDescriptorSource(String classpathResource) {
-        this(null, Objects.requireNonNull(classpathResource, "classpathResource"), HttpClient.newHttpClient());
-    }
-
-    private ConfluentDescriptorSource(URI endpoint, String classpathResource, HttpClient client) {
-        this.endpoint = endpoint;
-        this.classpathResource = classpathResource;
-        this.client = client;
+        this.endpoint = null;
+        this.classpathResource = Objects.requireNonNull(classpathResource, "classpathResource");
+        this.requestTimeout = DEFAULT_REQUEST_TIMEOUT;
+        this.client = null;
     }
 
     @Override
@@ -74,10 +101,21 @@ public final class ConfluentDescriptorSource implements DescriptorLoader {
         return "Confluent Schema Registry descriptor set";
     }
 
+    /** Closes the underlying {@link HttpClient} (no-op for classpath-backed sources). */
+    @Override
+    public void close() {
+        if (client != null) {
+            client.close();
+        }
+    }
+
     private byte[] readBytes() throws IOException, InterruptedException, DescriptorLoadException {
         if (endpoint != null) {
-            HttpResponse<byte[]> response = client.send(HttpRequest.newBuilder(endpoint).GET().build(),
-                    HttpResponse.BodyHandlers.ofByteArray());
+            HttpRequest request = HttpRequest.newBuilder(endpoint)
+                    .timeout(requestTimeout)
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
             if (response.statusCode() / 100 != 2) {
                 throw new DescriptorLoadException("Confluent endpoint returned HTTP " + response.statusCode());
             }

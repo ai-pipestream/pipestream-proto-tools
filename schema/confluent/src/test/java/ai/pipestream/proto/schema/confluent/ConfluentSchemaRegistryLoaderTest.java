@@ -131,8 +131,90 @@ class ConfluentSchemaRegistryLoaderTest {
         serveJson("/subjects/team/versions/latest", schemaBody("team", 1, "PROTOBUF", TEAM_PROTO,
                 reference("person.proto", "missing-subject", 1)));
 
-        List<FileDescriptor> descriptors = new ConfluentSchemaRegistryLoader(baseUri()).loadDescriptors();
+        ConfluentSchemaRegistryLoader loader = new ConfluentSchemaRegistryLoader(baseUri());
+        List<FileDescriptor> descriptors = loader.loadDescriptors();
         assertThat(descriptors).extracting(FileDescriptor::getName).containsExactly("person.proto");
+        assertThat(loader.lastSkippedSubjectCount()).isEqualTo(1);
+    }
+
+    @Test
+    void authFailureOnSubjectAbortsWholeLoad() throws Exception {
+        serveJson("/subjects", subjects("person"));
+        server.createContext("/subjects/person/versions/latest", exchange -> {
+            exchange.sendResponseHeaders(401, -1);
+            exchange.close();
+        });
+        assertThatThrownBy(() -> new ConfluentSchemaRegistryLoader(baseUri()).loadDescriptors())
+                .isInstanceOf(DescriptorLoadException.class)
+                .hasMessageContaining("401");
+    }
+
+    @Test
+    void serverErrorOnSubjectAbortsWholeLoad() throws Exception {
+        serveJson("/subjects", subjects("person"));
+        server.createContext("/subjects/person/versions/latest", exchange -> {
+            exchange.sendResponseHeaders(503, -1);
+            exchange.close();
+        });
+        assertThatThrownBy(() -> new ConfluentSchemaRegistryLoader(baseUri()).loadDescriptors())
+                .isInstanceOf(DescriptorLoadException.class)
+                .hasMessageContaining("503");
+    }
+
+    @Test
+    void requestTimeoutAbortsInsteadOfHangingForever() throws Exception {
+        server.createContext("/subjects", exchange -> {
+            try {
+                Thread.sleep(5_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+        });
+        try (ConfluentSchemaRegistryLoader loader = new ConfluentSchemaRegistryLoader(
+                baseUri(), java.time.Duration.ofSeconds(1), java.time.Duration.ofMillis(250))) {
+            assertThatThrownBy(loader::loadDescriptors)
+                    .isInstanceOf(DescriptorLoadException.class);
+        }
+    }
+
+    @Test
+    void fullyQualifiedNameMatchBeatsEarlierSimpleNameMatch() throws Exception {
+        // Subject "aaa" (listed first) has a message whose SIMPLE name is "Conflict";
+        // subject "zzz" has a package-less message whose FULL name is "Conflict".
+        String packaged = "syntax = \"proto3\";\npackage pkg;\nmessage Conflict { string a = 1; }\n";
+        String packageless = "syntax = \"proto3\";\nmessage Conflict { string b = 1; }\n";
+        serveJson("/subjects", subjects("aaa", "zzz"));
+        serveJson("/subjects/aaa/versions/latest", schemaBody("aaa", 1, "PROTOBUF", packaged));
+        serveJson("/subjects/zzz/versions/latest", schemaBody("zzz", 1, "PROTOBUF", packageless));
+
+        ConfluentSchemaRegistryLoader loader = new ConfluentSchemaRegistryLoader(baseUri());
+        assertThat(loader.loadDescriptor("Conflict").getName()).isEqualTo("zzz.proto");
+        assertThat(loader.loadDescriptor("pkg.Conflict").getName()).isEqualTo("aaa.proto");
+    }
+
+    @Test
+    void lookupUsesCachedRegistryUntilCleared() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger subjectsCalls = new java.util.concurrent.atomic.AtomicInteger();
+        byte[] payload = subjects("person").getBytes(StandardCharsets.UTF_8);
+        server.createContext("/subjects", exchange -> {
+            subjectsCalls.incrementAndGet();
+            exchange.getResponseHeaders().add("Content-Type", "application/vnd.schemaregistry.v1+json");
+            exchange.sendResponseHeaders(200, payload.length);
+            exchange.getResponseBody().write(payload);
+            exchange.close();
+        });
+        serveJson("/subjects/person/versions/latest", schemaBody("person", 1, "PROTOBUF", PERSON_PROTO));
+
+        ConfluentSchemaRegistryLoader loader = new ConfluentSchemaRegistryLoader(baseUri());
+        assertThat(loader.loadDescriptor("person.proto")).isNotNull();
+        assertThat(loader.loadDescriptor("Person")).isNotNull();
+        assertThat(subjectsCalls.get()).isEqualTo(1);
+
+        loader.clearCache();
+        assertThat(loader.loadDescriptor("person.proto")).isNotNull();
+        assertThat(subjectsCalls.get()).isEqualTo(2);
     }
 
     @Test
