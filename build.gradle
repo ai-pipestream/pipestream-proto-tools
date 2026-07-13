@@ -95,17 +95,17 @@ subprojects {
                 create('maven', MavenPublication) {
                     if (project.name == 'bom') {
                         from components.javaPlatform
-                        artifactId = 'proteus-bom'
+                        artifactId = 'protomolt-bom'
                     } else {
                         from components.java
                     }
                     pom {
                         name = project.name == 'bom'
-                            ? 'Proteus BOM'
+                            ? 'ProtoMolt BOM'
                             : project.name
                         // Lazy: module build scripts set `description` after this block runs.
-                        description = providers.provider { project.description ?: 'Proteus protobuf tooling' }
-                        url = 'https://github.com/ai-pipestream/proteus'
+                        description = providers.provider { project.description ?: 'ProtoMolt protobuf tooling' }
+                        url = 'https://github.com/ai-pipestream/protomolt'
                         licenses {
                             license {
                                 name = 'MIT License'
@@ -113,20 +113,20 @@ subprojects {
                             }
                         }
                         scm {
-                            connection = 'scm:git:https://github.com/ai-pipestream/proteus.git'
-                            developerConnection = 'scm:git:ssh://git@github.com/ai-pipestream/proteus.git'
-                            url = 'https://github.com/ai-pipestream/proteus'
+                            connection = 'scm:git:https://github.com/ai-pipestream/protomolt.git'
+                            developerConnection = 'scm:git:ssh://git@github.com/ai-pipestream/protomolt.git'
+                            url = 'https://github.com/ai-pipestream/protomolt'
                         }
                     }
                 }
                 if (project.name == 'bom') {
                     create('catalog', MavenPublication) {
                         from components.versionCatalog
-                        artifactId = 'proteus-bom-catalog'
+                        artifactId = 'protomolt-bom-catalog'
                         pom {
-                            name = 'Proteus BOM Catalog'
-                            description = 'Gradle version catalog for Proteus protobuf tools'
-                            url = 'https://github.com/ai-pipestream/proteus'
+                            name = 'ProtoMolt BOM Catalog'
+                            description = 'Gradle version catalog for ProtoMolt protobuf tools'
+                            url = 'https://github.com/ai-pipestream/protomolt'
                         }
                     }
                 }

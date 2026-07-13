@@ -1,4 +1,4 @@
-# Proteus
+# ProtoMolt
 
 Public JVM toolkit for protobuf: **CEL-driven field mapping**, descriptor catalogs,
 schema-registry loaders, metadata extraction, search-index projection, and
@@ -15,7 +15,7 @@ into CEL as `input`.
 
 ## Repository layout
 
-Modules are grouped by domain; Maven artifact IDs carry the `proteus-` prefix:
+Modules are grouped by domain; Maven artifact IDs carry the `protomolt-` prefix:
 
 ```text
 core/           descriptors, helpers
@@ -35,7 +35,7 @@ samples/
 
 | Artifact | Path | Role |
 |---|---|---|
-| `proteus-bom` | `bom/` | Version alignment |
+| `protomolt-bom` | `bom/` | Version alignment |
 | `…-descriptors` | `core/descriptors` | `DescriptorRegistry` / loaders (classpath, `.dsc`) |
 | `…-helpers` | `core/helpers` | `AnyHandler`, `TypeConverter`, `MappingHelper`, `MessageDiff` |
 | `…-mapper-core` | `mapper/core` | Text rules (`target = source`, `+=`, `-field`) + path I/O |
@@ -65,8 +65,8 @@ samples/
 
 ```groovy
 dependencies {
-    implementation platform('ai.pipestream:proteus-bom:<version>')
-    implementation 'ai.pipestream:proteus-mapper-cel'
+    implementation platform('ai.pipestream:protomolt-bom:<version>')
+    implementation 'ai.pipestream:protomolt-mapper-cel'
 }
 ```
 
@@ -121,7 +121,7 @@ For Kafka consumers on Apicurio serde, prefer the serde's own config flag when a
 ## Apicurio descriptors
 
 ```groovy
-implementation 'ai.pipestream:proteus-schema-apicurio'
+implementation 'ai.pipestream:protomolt-schema-apicurio'
 ```
 
 Plain Java:
@@ -391,9 +391,9 @@ protovalidate v1.2.2 conformance suite in two ways that share one runner:
   binary can drive it and score the full suite:
 
   ```bash
-  ./gradlew :proteus-protobuf-validation-conformance:installDist
+  ./gradlew :protomolt-protobuf-validation-conformance:installDist
   protovalidate-conformance \
-    protobuf/validation-conformance/build/install/proteus-protobuf-validation-conformance/bin/proteus-protobuf-validation-conformance
+    protobuf/validation-conformance/build/install/protomolt-protobuf-validation-conformance/bin/protomolt-protobuf-validation-conformance
   ```
 
   Structured field/rule paths are reconstructed via a faithful port of the
@@ -435,7 +435,7 @@ indexer.toNdjsonLine(doc);                  // validates first when configured
 
 Indexing hints use protobuf `FieldOptions` extensions that bake into the descriptor —
 plain `protoc` / protobuf-gradle-plugin is all the codegen you need. The
-`.proto` ships inside `proteus-index-spi` (`index/spi`, also on the
+`.proto` ships inside `protomolt-index-spi` (`index/spi`, also on the
 classpath as a resource). Use `…-protobuf-indexing` for the validate → NDJSON facade.
 
 | Concern | Option | Tooling |
@@ -493,8 +493,8 @@ that run against real registries:
 ```shell
 docker compose -f docker-compose.integration.yml up -d
 
-./gradlew :proteus-schema-apicurio:test \
-          :proteus-schema-confluent:test
+./gradlew :protomolt-schema-apicurio:test \
+          :protomolt-schema-confluent:test
 ```
 
 They cover Apicurio Registry's native v3 API (`ApicurioDescriptorLoader`) and the
@@ -514,7 +514,7 @@ properties (or the matching environment variables):
 | `pipestream.it.confluent.url` | `PIPESTREAM_IT_CONFLUENT_URL` | `http://localhost:18781` |
 
 ```shell
-./gradlew :proteus-schema-apicurio:test \
+./gradlew :protomolt-schema-apicurio:test \
           -Dpipestream.it.apicurio.url=http://my-registry:8080
 ```
 

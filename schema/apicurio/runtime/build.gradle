@@ -5,14 +5,14 @@ plugins {
 description = 'Apicurio Registry descriptor loader - Quarkus runtime'
 
 quarkusExtension {
-    deploymentModule = 'proteus-schema-apicurio-deployment'
+    deploymentModule = 'protomolt-schema-apicurio-deployment'
 }
 
 dependencies {
     implementation platform(libs.quarkus.bom)
 
-    api project(':proteus-descriptors')
-    api project(':proteus-helpers')
+    api project(':protomolt-descriptors')
+    api project(':protomolt-helpers')
     api libs.apicurio.registry.java.sdk
     implementation libs.apicurio.registry.protobuf.serde
     implementation libs.quarkus.arc

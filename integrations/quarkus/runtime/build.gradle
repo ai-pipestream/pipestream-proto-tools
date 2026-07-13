@@ -5,14 +5,14 @@ plugins {
 description = 'Quarkus extension for Pipestream protobuf tools'
 
 quarkusExtension {
-    deploymentModule = 'proteus-quarkus-deployment'
+    deploymentModule = 'protomolt-quarkus-deployment'
 }
 
 dependencies {
     implementation platform(libs.quarkus.bom)
-    api project(':proteus-mapper-cel')
-    api project(':proteus-rest')
-    api project(':proteus-server-common')
+    api project(':protomolt-mapper-cel')
+    api project(':protomolt-rest')
+    api project(':protomolt-server-common')
     api libs.quarkus.arc
 }
 

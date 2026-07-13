@@ -8,7 +8,7 @@ import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
 
 /** Registers the Pipestream protobuf tools extension at Quarkus build time. */
 public final class ProtoToolsProcessor {
-    private static final String FEATURE = "proteus";
+    private static final String FEATURE = "protomolt";
 
     @BuildStep
     FeatureBuildItem feature() {

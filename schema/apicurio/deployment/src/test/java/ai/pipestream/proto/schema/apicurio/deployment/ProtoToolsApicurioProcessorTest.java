@@ -14,7 +14,7 @@ class ProtoToolsApicurioProcessorTest {
     void registersFeatureAndUnremovableBeans() {
         ProtoToolsApicurioProcessor processor = new ProtoToolsApicurioProcessor();
         FeatureBuildItem feature = processor.feature();
-        assertThat(feature.getName()).isEqualTo("proteus-schema-apicurio");
+        assertThat(feature.getName()).isEqualTo("protomolt-schema-apicurio");
 
         AdditionalBeanBuildItem beans = processor.registerBeans();
         assertThat(beans.isRemovable()).isFalse();

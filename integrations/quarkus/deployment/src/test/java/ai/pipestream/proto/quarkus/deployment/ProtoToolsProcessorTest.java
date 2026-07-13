@@ -14,7 +14,7 @@ class ProtoToolsProcessorTest {
     void registersFeatureAndReflection() {
         ProtoToolsProcessor processor = new ProtoToolsProcessor();
         FeatureBuildItem feature = processor.feature();
-        assertThat(feature.getName()).isEqualTo("proteus");
+        assertThat(feature.getName()).isEqualTo("protomolt");
 
         ReflectiveClassBuildItem reflective = processor.registerProducerForReflection();
         assertThat(reflective.getClassNames()).contains(ProtoToolsProducer.class.getName());

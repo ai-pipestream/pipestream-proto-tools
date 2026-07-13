@@ -5,14 +5,14 @@ plugins {
 description = 'Protobuf indexing standard — descriptor hints, plans, and NDJSON projection'
 
 dependencies {
-    api project(':proteus-index-spi')
-    api project(':proteus-index-ndjson')
-    api project(':proteus-protobuf-validation')
+    api project(':protomolt-index-spi')
+    api project(':protomolt-index-ndjson')
+    api project(':protomolt-protobuf-validation')
     api libs.protobuf.java
 
     // Extract .proto imports for test schemas (hints + validate).
-    protobuf project(':proteus-index-spi')
-    protobuf project(':proteus-protobuf-validation')
+    protobuf project(':protomolt-index-spi')
+    protobuf project(':protomolt-protobuf-validation')
 }
 
 protobuf {

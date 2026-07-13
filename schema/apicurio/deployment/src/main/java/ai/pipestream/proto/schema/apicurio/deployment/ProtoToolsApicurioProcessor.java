@@ -9,7 +9,7 @@ import io.quarkus.deployment.builditem.FeatureBuildItem;
 /** Quarkus deployment processor for the Apicurio descriptor extension. */
 public class ProtoToolsApicurioProcessor {
 
-    private static final String FEATURE = "proteus-schema-apicurio";
+    private static final String FEATURE = "protomolt-schema-apicurio";
 
     @BuildStep
     FeatureBuildItem feature() {

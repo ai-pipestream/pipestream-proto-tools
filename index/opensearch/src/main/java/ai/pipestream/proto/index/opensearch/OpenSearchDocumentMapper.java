@@ -25,7 +25,7 @@ import java.util.Objects;
 /**
  * OpenSearch-oriented document map builder.
  * Uses a shared {@link IndexingPlan} (descriptor hints); does not emit NDJSON —
- * pair with {@code proteus-index-ndjson} when you need bulk lines.
+ * pair with {@code protomolt-index-ndjson} when you need bulk lines.
  *
  * <p>Message values are converted through {@link JsonFormat}, so nested values take exactly
  * the shapes the NDJSON writer emits: nested maps become JSON objects, int64 becomes a string,

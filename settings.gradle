@@ -10,107 +10,107 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
-rootProject.name = 'proteus'
+rootProject.name = 'protomolt'
 
 include 'bom'
 
-include 'proteus-formats'
-project(':proteus-formats').projectDir = file('formats')
+include 'protomolt-formats'
+project(':protomolt-formats').projectDir = file('formats')
 
-include 'proteus-descriptors'
-project(':proteus-descriptors').projectDir = file('core/descriptors')
+include 'protomolt-descriptors'
+project(':protomolt-descriptors').projectDir = file('core/descriptors')
 
-include 'proteus-helpers'
-project(':proteus-helpers').projectDir = file('core/helpers')
+include 'protomolt-helpers'
+project(':protomolt-helpers').projectDir = file('core/helpers')
 
-include 'proteus-mapper-core'
-project(':proteus-mapper-core').projectDir = file('mapper/core')
+include 'protomolt-mapper-core'
+project(':protomolt-mapper-core').projectDir = file('mapper/core')
 
-include 'proteus-mapper-cel'
-project(':proteus-mapper-cel').projectDir = file('mapper/cel')
+include 'protomolt-mapper-cel'
+project(':protomolt-mapper-cel').projectDir = file('mapper/cel')
 
-include 'proteus-metadata'
-project(':proteus-metadata').projectDir = file('mapper/metadata')
+include 'protomolt-metadata'
+project(':protomolt-metadata').projectDir = file('mapper/metadata')
 
-include 'proteus-protobuf-metadata'
-project(':proteus-protobuf-metadata').projectDir = file('protobuf/metadata')
+include 'protomolt-protobuf-metadata'
+project(':protomolt-protobuf-metadata').projectDir = file('protobuf/metadata')
 
-include 'proteus-protobuf-validation'
-project(':proteus-protobuf-validation').projectDir = file('protobuf/validation')
+include 'protomolt-protobuf-validation'
+project(':protomolt-protobuf-validation').projectDir = file('protobuf/validation')
 
-include 'proteus-protobuf-validation-protovalidate'
-project(':proteus-protobuf-validation-protovalidate').projectDir = file('protobuf/validation-protovalidate')
+include 'protomolt-protobuf-validation-protovalidate'
+project(':protomolt-protobuf-validation-protovalidate').projectDir = file('protobuf/validation-protovalidate')
 
-include 'proteus-protobuf-validation-conformance'
-project(':proteus-protobuf-validation-conformance').projectDir = file('protobuf/validation-conformance')
+include 'protomolt-protobuf-validation-conformance'
+project(':protomolt-protobuf-validation-conformance').projectDir = file('protobuf/validation-conformance')
 
-include 'proteus-protobuf-indexing'
-project(':proteus-protobuf-indexing').projectDir = file('protobuf/indexing')
+include 'protomolt-protobuf-indexing'
+project(':protomolt-protobuf-indexing').projectDir = file('protobuf/indexing')
 
-include 'proteus-schema-apicurio'
-project(':proteus-schema-apicurio').projectDir = file('schema/apicurio/runtime')
+include 'protomolt-schema-apicurio'
+project(':protomolt-schema-apicurio').projectDir = file('schema/apicurio/runtime')
 
-include 'proteus-schema-apicurio-deployment'
-project(':proteus-schema-apicurio-deployment').projectDir = file('schema/apicurio/deployment')
+include 'protomolt-schema-apicurio-deployment'
+project(':protomolt-schema-apicurio-deployment').projectDir = file('schema/apicurio/deployment')
 
-include 'proteus-schema-confluent'
-project(':proteus-schema-confluent').projectDir = file('schema/confluent')
+include 'protomolt-schema-confluent'
+project(':protomolt-schema-confluent').projectDir = file('schema/confluent')
 
-include 'proteus-index-spi'
-project(':proteus-index-spi').projectDir = file('index/spi')
+include 'protomolt-index-spi'
+project(':protomolt-index-spi').projectDir = file('index/spi')
 
-include 'proteus-index-ndjson'
-project(':proteus-index-ndjson').projectDir = file('index/ndjson')
+include 'protomolt-index-ndjson'
+project(':protomolt-index-ndjson').projectDir = file('index/ndjson')
 
-include 'proteus-index-lucene'
-project(':proteus-index-lucene').projectDir = file('index/lucene')
+include 'protomolt-index-lucene'
+project(':protomolt-index-lucene').projectDir = file('index/lucene')
 
-include 'proteus-index-opensearch'
-project(':proteus-index-opensearch').projectDir = file('index/opensearch')
+include 'protomolt-index-opensearch'
+project(':protomolt-index-opensearch').projectDir = file('index/opensearch')
 
-include 'proteus-index-solr'
-project(':proteus-index-solr').projectDir = file('index/solr')
+include 'protomolt-index-solr'
+project(':protomolt-index-solr').projectDir = file('index/solr')
 
-include 'proteus-json'
-project(':proteus-json').projectDir = file('http/json')
+include 'protomolt-json'
+project(':protomolt-json').projectDir = file('http/json')
 
-include 'proteus-rest'
-project(':proteus-rest').projectDir = file('http/rest')
+include 'protomolt-rest'
+project(':protomolt-rest').projectDir = file('http/rest')
 
-include 'proteus-openapi'
-project(':proteus-openapi').projectDir = file('http/openapi')
+include 'protomolt-openapi'
+project(':protomolt-openapi').projectDir = file('http/openapi')
 
-include 'proteus-jsonschema'
-project(':proteus-jsonschema').projectDir = file('http/jsonschema')
+include 'protomolt-jsonschema'
+project(':protomolt-jsonschema').projectDir = file('http/jsonschema')
 
-include 'proteus-quarkus'
-project(':proteus-quarkus').projectDir = file('integrations/quarkus/runtime')
+include 'protomolt-quarkus'
+project(':protomolt-quarkus').projectDir = file('integrations/quarkus/runtime')
 
-include 'proteus-quarkus-deployment'
-project(':proteus-quarkus-deployment').projectDir = file('integrations/quarkus/deployment')
+include 'protomolt-quarkus-deployment'
+project(':protomolt-quarkus-deployment').projectDir = file('integrations/quarkus/deployment')
 
-include 'proteus-spring'
-project(':proteus-spring').projectDir = file('integrations/spring')
+include 'protomolt-spring'
+project(':protomolt-spring').projectDir = file('integrations/spring')
 
-include 'proteus-server-common'
-project(':proteus-server-common').projectDir = file('servers/common')
+include 'protomolt-server-common'
+project(':protomolt-server-common').projectDir = file('servers/common')
 
-include 'proteus-server-jdk'
-project(':proteus-server-jdk').projectDir = file('servers/jdk')
+include 'protomolt-server-jdk'
+project(':protomolt-server-jdk').projectDir = file('servers/jdk')
 
-include 'proteus-server-vertx'
-project(':proteus-server-vertx').projectDir = file('servers/vertx')
+include 'protomolt-server-vertx'
+project(':protomolt-server-vertx').projectDir = file('servers/vertx')
 
-include 'proteus-server-netty'
-project(':proteus-server-netty').projectDir = file('servers/netty')
+include 'protomolt-server-netty'
+project(':protomolt-server-netty').projectDir = file('servers/netty')
 
-include 'proteus-server-spring'
-project(':proteus-server-spring').projectDir = file('servers/spring')
+include 'protomolt-server-spring'
+project(':protomolt-server-spring').projectDir = file('servers/spring')
 
-include 'proteus-server-micronaut'
-project(':proteus-server-micronaut').projectDir = file('servers/micronaut')
+include 'protomolt-server-micronaut'
+project(':protomolt-server-micronaut').projectDir = file('servers/micronaut')
 
-include 'proteus-server-quarkus'
-project(':proteus-server-quarkus').projectDir = file('servers/quarkus')
+include 'protomolt-server-quarkus'
+project(':protomolt-server-quarkus').projectDir = file('servers/quarkus')
 
 include 'samples'

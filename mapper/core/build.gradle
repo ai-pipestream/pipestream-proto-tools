@@ -1,7 +1,7 @@
 description = 'Core protobuf mapping APIs'
 
 dependencies {
-    api project(':proteus-helpers')
+    api project(':protomolt-helpers')
 
     testImplementation platform(libs.junit.bom)
     testImplementation libs.junit.jupiter

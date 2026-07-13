@@ -1,7 +1,7 @@
 description = 'Shared protobuf and JSON helper APIs'
 
 dependencies {
-    api project(':proteus-descriptors')
+    api project(':protomolt-descriptors')
     api libs.jackson.databind
     api libs.protobuf.java.util
 

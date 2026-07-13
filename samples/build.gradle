@@ -1,8 +1,8 @@
 description = 'Examples for Pipestream protobuf tools'
 
 dependencies {
-    implementation project(':proteus-mapper-cel')
-    implementation project(':proteus-server-jdk')
+    implementation project(':protomolt-mapper-cel')
+    implementation project(':protomolt-server-jdk')
 }
 
 tasks.register('runCelMapping', JavaExec) {

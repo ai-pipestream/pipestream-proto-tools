@@ -1,4 +1,4 @@
-proteus-protobuf-validation-conformance
+protomolt-protobuf-validation-conformance
 ======================================================
 
 This module vendors the protovalidate conformance harness schema:
@@ -19,5 +19,5 @@ structured FieldPath output matches the conformance runner byte-for-byte.
 
 The vendored file is never modified; the conformance protocol and the
 field-path grammar are defined by the upstream project. All other code in
-this module is original to proteus and licensed under the
+this module is original to protomolt and licensed under the
 repository's MIT license.

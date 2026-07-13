@@ -1,5 +1,5 @@
 description = 'Protobuf metadata extraction and mapping'
 
 dependencies {
-    api project(':proteus-mapper-cel')
+    api project(':protomolt-mapper-cel')
 }
