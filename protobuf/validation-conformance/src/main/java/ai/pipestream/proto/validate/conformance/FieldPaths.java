@@ -33,6 +33,18 @@ final class FieldPaths {
      * @throws IllegalArgumentException if a path element cannot be resolved against the descriptor
      */
     static FieldPath unmarshal(Descriptor message, String path) {
+        return unmarshal(message, path, name -> null);
+    }
+
+    /**
+     * As {@link #unmarshal(Descriptor, String)}, resolving {@code [full.extension.name]} elements
+     * (predefined-rule extensions in rule paths) through {@code extensions}. An extension element
+     * mirrors the Go runner's shape: the extension's field number and type, with the bracketed
+     * full name as the element name.
+     */
+    static FieldPath unmarshal(
+            Descriptor message, String path,
+            java.util.function.Function<String, FieldDescriptor> extensions) {
         FieldPath.Builder result = FieldPath.newBuilder();
         String rest = path;
         boolean atEnd = false;
@@ -46,7 +58,22 @@ final class FieldPaths {
                 throw new IllegalArgumentException("empty field name in path: " + path);
             }
             if (p.isExt) {
-                throw new IllegalArgumentException("extension path elements are unsupported: " + p.name);
+                FieldDescriptor ext = extensions.apply(p.name);
+                if (ext == null) {
+                    throw new IllegalArgumentException("unresolved extension in path: " + p.name);
+                }
+                result.addElements(FieldPathElement.newBuilder()
+                        .setFieldNumber(ext.getNumber())
+                        .setFieldName("[" + ext.getFullName() + "]")
+                        .setFieldType(ext.getType().toProto())
+                        .build());
+                Descriptor extType = messageOf(ext);
+                if (extType != null) {
+                    message = extType;
+                }
+                rest = p.rest;
+                atEnd = p.atEnd;
+                continue;
             }
 
             FieldDescriptor fd = message.findFieldByName(p.name);

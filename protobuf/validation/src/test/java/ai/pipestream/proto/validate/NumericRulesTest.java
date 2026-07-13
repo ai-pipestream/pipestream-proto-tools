@@ -1,6 +1,7 @@
 package ai.pipestream.proto.validate;
 
 import ai.pipestream.proto.validate.testdata.NumberGauntlet;
+import ai.pipestream.proto.validate.testdata.ZeroGauntlet;
 import com.google.protobuf.Message;
 import org.junit.jupiter.api.Test;
 
@@ -98,5 +99,15 @@ class NumericRulesTest {
     @Test
     void unsetNumericFieldsAreSkipped() {
         assertValid(NumberGauntlet.getDefaultInstance());
+    }
+
+    @Test
+    void negativeZeroCountsAsPopulated() {
+        // weight has implicit presence: +0.0 is the unpopulated zero value, but -0.0 has
+        // different raw bits, is serialized, and therefore satisfies required.
+        assertViolation(ZeroGauntlet.newBuilder().setWeight(0.0).build(),
+                "weight", "required");
+        assertValid(ZeroGauntlet.newBuilder().setWeight(-0.0).build());
+        assertValid(ZeroGauntlet.newBuilder().setWeight(1.5).build());
     }
 }

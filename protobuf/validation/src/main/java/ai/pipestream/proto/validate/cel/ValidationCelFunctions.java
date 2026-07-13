@@ -1,6 +1,7 @@
 package ai.pipestream.proto.validate.cel;
 
 import ai.pipestream.format.Formats;
+import com.google.common.primitives.UnsignedLong;
 import com.google.protobuf.ByteString;
 import dev.cel.common.CelFunctionDecl;
 import dev.cel.common.CelOverloadDecl;
@@ -128,7 +129,9 @@ public final class ValidationCelFunctions {
     private static String formatVerb(char verb, Object value, int precision) {
         return switch (verb) {
             case 's' -> celString(value);
-            case 'd' -> String.valueOf(toLong(value));
+            // UnsignedLong renders through its own toString; Number.longValue() would go negative
+            // above Long.MAX_VALUE. (%o/%b/%x are bit-pattern renderings and stay unsigned.)
+            case 'd' -> value instanceof UnsignedLong u ? u.toString() : String.valueOf(toLong(value));
             case 'f' -> String.format("%." + (precision < 0 ? 6 : precision) + "f", toDouble(value));
             case 'e' -> String.format("%." + (precision < 0 ? 6 : precision) + "e", toDouble(value));
             case 'x' -> hex(value, false);
@@ -145,9 +148,25 @@ public final class ValidationCelFunctions {
             return bytes.toStringUtf8();
         }
         if (value instanceof Double d) {
-            return d == Math.floor(d) && !d.isInfinite() ? String.valueOf(d.longValue()) : d.toString();
+            if (d == Math.floor(d) && !d.isInfinite()) {
+                // Whole values print without a fraction; beyond long range (where longValue()
+                // would saturate) they switch to CEL's exponent form instead.
+                return Math.abs(d) < 0x1p63 ? String.valueOf(d.longValue()) : exponentForm(d);
+            }
+            return d.toString();
         }
         return String.valueOf(value);
+    }
+
+    /** Go/CEL-style exponent form for a large whole double, e.g. {@code 1e+100}. */
+    private static String exponentForm(double d) {
+        String s = Double.toString(d); // always E-notation at this magnitude, e.g. "1.0E100"
+        int e = s.indexOf('E');
+        String mantissa = s.substring(0, e);
+        if (mantissa.endsWith(".0")) {
+            mantissa = mantissa.substring(0, mantissa.length() - 2);
+        }
+        return mantissa + "e+" + s.substring(e + 1);
     }
 
     private static long toLong(Object value) {

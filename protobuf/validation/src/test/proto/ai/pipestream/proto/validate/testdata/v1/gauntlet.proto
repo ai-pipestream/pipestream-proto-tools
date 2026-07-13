@@ -78,6 +78,23 @@ message NumberGauntlet {
   }];
 }
 
+// Implicit-presence probe: -0.0 has different raw bits from +0.0 and is serialized,
+// so it satisfies required, while +0.0 is the unpopulated zero value.
+message ZeroGauntlet {
+  double weight = 1 [(ai.pipestream.proto.validate.v1.field) = {
+    required: true
+  }];
+}
+
+// Self-recursive message for the nesting depth guard; the label rule gives the
+// walk something to validate at every level.
+message Matryoshka {
+  optional string label = 1 [(ai.pipestream.proto.validate.v1.field) = {
+    string: { min_len: 1 }
+  }];
+  Matryoshka child = 2;
+}
+
 enum Rank {
   RANK_UNSPECIFIED = 0;
   RANK_BRONZE = 1;

@@ -2,6 +2,7 @@ package ai.pipestream.proto.validate.conformance;
 
 import ai.pipestream.proto.validate.ProtoValidator;
 import ai.pipestream.proto.validate.RuleCompilationException;
+import ai.pipestream.proto.validate.RuleEvaluationException;
 import ai.pipestream.proto.validate.ValidationResult;
 import build.buf.validate.FieldPath;
 import build.buf.validate.FieldPathElement;
@@ -10,7 +11,11 @@ import build.buf.validate.Violation;
 import build.buf.validate.Violations;
 import buf.validate.conformance.harness.Harness.TestResult;
 import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Message;
+
+import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Runs {@link ProtoValidator} over a single conformance case and expresses the outcome as the
@@ -31,11 +36,14 @@ public final class ConformanceRunner {
     private static final String KEY_SUFFIX = "#key";
 
     private final ProtoValidator validator;
-    private final PredefinedRules predefined;
+    // Resolves [full.extension.name] elements in predefined-rule paths; returns null when unknown.
+    private final Function<String, FieldDescriptor> extensions;
     // When set, a per-message-type validator is built (and cached) so message-level CEL can navigate
-    // this.<field>; otherwise the single injected validator is reused.
+    // this.<field>; otherwise the single injected validator is reused. run() is a public API, so
+    // the cache must tolerate concurrent callers.
     private final boolean perMessageType;
-    private final java.util.Map<Descriptor, ProtoValidator> byType = new java.util.HashMap<>();
+    private final Map<Descriptor, ProtoValidator> byType =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Uses the default source chain, which includes the buf.validate dialect via ServiceLoader. */
     public ConformanceRunner() {
@@ -43,12 +51,15 @@ public final class ConformanceRunner {
     }
 
     public ConformanceRunner(ProtoValidator validator) {
-        this(validator, null, false);
+        this(validator, name -> null, false);
     }
 
-    ConformanceRunner(ProtoValidator validator, PredefinedRules predefined, boolean perMessageType) {
+    ConformanceRunner(
+            ProtoValidator validator,
+            Function<String, FieldDescriptor> extensions,
+            boolean perMessageType) {
         this.validator = validator;
-        this.predefined = predefined;
+        this.extensions = extensions;
         this.perMessageType = perMessageType;
     }
 
@@ -68,21 +79,18 @@ public final class ConformanceRunner {
             for (ValidationResult.Violation v : result.violations()) {
                 violations.addViolations(toViolation(root, v));
             }
-            if (predefined != null) {
-                violations.addAllViolations(predefined.evaluate(message));
-            }
             if (violations.getViolationsCount() == 0) {
                 return TestResult.newBuilder().setSuccess(true).build();
             }
             return TestResult.newBuilder().setValidationError(violations.build()).build();
         } catch (RuleCompilationException e) {
             return TestResult.newBuilder().setCompilationError(String.valueOf(e.getMessage())).build();
-        } catch (RuntimeException e) {
+        } catch (RuleEvaluationException e) {
             return TestResult.newBuilder().setRuntimeError(String.valueOf(e.getMessage())).build();
         }
     }
 
-    private static Violation toViolation(Descriptor root, ValidationResult.Violation v) {
+    private Violation toViolation(Descriptor root, ValidationResult.Violation v) {
         Violation.Builder b = Violation.newBuilder()
                 .setRuleId(v.ruleId())
                 .setMessage(v.message());
@@ -111,9 +119,10 @@ public final class ConformanceRunner {
                 String ruleId = v.ruleId();
                 boolean containerLevel = ruleId.startsWith("repeated.") || ruleId.startsWith("map.");
                 String prefix = containerLevel ? "" : containerPrefix(fieldPath, forKey);
-                // Custom CEL rules carry an explicit cel[N] rule path the id cannot express.
+                // Custom CEL rules carry an explicit cel[N] (or predefined-extension) rule path
+                // the id cannot express.
                 String base = v.rulePath().isEmpty() ? rulePath(ruleId) : v.rulePath();
-                b.setRule(FieldPaths.unmarshal(FieldRules.getDescriptor(), prefix + base));
+                b.setRule(FieldPaths.unmarshal(FieldRules.getDescriptor(), prefix + base, extensions));
             } catch (RuntimeException ignored) {
                 // Rule ids without a FieldRules mapping (e.g. bare "cel") leave the rule path unset.
             }
