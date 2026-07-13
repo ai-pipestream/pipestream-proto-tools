@@ -7,9 +7,13 @@ import buf.validate.conformance.harness.Harness.TestConformanceResponse;
 import buf.validate.conformance.harness.Harness.TestResult;
 import com.google.protobuf.Any;
 import com.google.protobuf.Descriptors.Descriptor;
+import com.google.protobuf.Descriptors.FieldDescriptor;
+import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.ExtensionRegistry;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -46,11 +50,11 @@ public final class ConformanceMain {
     static TestConformanceResponse process(TestConformanceRequest request, ExtensionRegistry registry) {
         TestConformanceResponse.Builder response = TestConformanceResponse.newBuilder();
         Map<String, Descriptor> types;
-        PredefinedRules predefined;
+        Map<String, FieldDescriptor> extensions;
         try {
             DescriptorSets.Linked linked = DescriptorSets.link(request.getFdset());
             types = linked.types();
-            predefined = PredefinedRules.from(linked.files(), registry);
+            extensions = extensionsByName(linked.files());
         } catch (Exception e) {
             // Without descriptors nothing can run; report the failure per case so the runner sees it.
             String message = "failed to link fdset: " + e.getMessage();
@@ -60,11 +64,37 @@ public final class ConformanceMain {
             return response.build();
         }
 
-        ConformanceRunner runner = new ConformanceRunner(ProtoValidator.create(), predefined, true);
+        // Predefined rules are enforced by the library itself (ProtovalidateRuleSource translates
+        // them); the runner only needs the request's extensions to expand their rule paths.
+        ConformanceRunner runner = new ConformanceRunner(ProtoValidator.create(), extensions::get, true);
         for (Map.Entry<String, Any> entry : request.getCasesMap().entrySet()) {
             response.putResults(entry.getKey(), runCase(runner, types, entry.getValue(), registry));
         }
         return response.build();
+    }
+
+    /** Every extension declared in {@code files} (top-level and nested), keyed by full name. */
+    private static Map<String, FieldDescriptor> extensionsByName(List<FileDescriptor> files) {
+        Map<String, FieldDescriptor> extensions = new HashMap<>();
+        for (FileDescriptor file : files) {
+            for (FieldDescriptor ext : file.getExtensions()) {
+                extensions.put(ext.getFullName(), ext);
+            }
+            for (Descriptor message : file.getMessageTypes()) {
+                collectNestedExtensions(message, extensions);
+            }
+        }
+        return extensions;
+    }
+
+    private static void collectNestedExtensions(
+            Descriptor message, Map<String, FieldDescriptor> extensions) {
+        for (FieldDescriptor ext : message.getExtensions()) {
+            extensions.put(ext.getFullName(), ext);
+        }
+        for (Descriptor nested : message.getNestedTypes()) {
+            collectNestedExtensions(nested, extensions);
+        }
     }
 
     private static TestResult runCase(
