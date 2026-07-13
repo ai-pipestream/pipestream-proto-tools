@@ -12,6 +12,7 @@ import dev.cel.common.types.StructTypeReference;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -21,12 +22,28 @@ import java.util.concurrent.Executors;
  *
  * <p>The message descriptor is used to build a typed CEL environment for {@code input},
  * so selector compile errors (typos, unknown fields) surface eagerly before any selector
- * is evaluated. Selector failures are reported as {@link IllegalStateException}s carrying
- * the selector name and expression text.
+ * is evaluated. Each selector is validated once per descriptor (results are cached), and
+ * is also precompiled in the injected evaluator's own environment so an environment
+ * mismatch (e.g. an evaluator environment lacking {@code input}) surfaces eagerly as an
+ * invalid-selector error instead of failing later at evaluation time; the precompiled
+ * program is cached by the evaluator and reused for every evaluation. Selector failures
+ * are reported as {@link IllegalStateException}s carrying the selector name and
+ * expression text.
  */
 public final class MetadataExtractor {
+
+    /** Bound for the per-descriptor validation environment cache. */
+    private static final int MAX_ENVIRONMENTS = 64;
+
+    /** Bound for the per-descriptor set of already-validated selector expressions. */
+    private static final int MAX_VALIDATED_EXPRESSIONS = 1024;
+
     private final CelEvaluator evaluator;
-    private final ConcurrentHashMap<Descriptor, Cel> validationEnvironments = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Descriptor, ValidationEnvironment> validationEnvironments =
+            new ConcurrentHashMap<>();
+
+    private record ValidationEnvironment(Cel cel, Set<String> validatedExpressions) {
+    }
 
     public MetadataExtractor(CelEvaluator evaluator) {
         this.evaluator = Objects.requireNonNull(evaluator, "evaluator");
@@ -66,19 +83,47 @@ public final class MetadataExtractor {
         }
     }
 
-    /** Compiles every selector against a typed environment so errors surface before evaluation. */
+    /**
+     * Compiles every selector once against a typed environment (typos surface with field-level
+     * diagnostics) and once in the evaluator's own environment (whose cached program is what
+     * {@link #extract} evaluates), so errors surface before evaluation. Validation results are
+     * cached per descriptor: subsequent {@code extract} calls with already-validated selectors
+     * do not recompile anything.
+     */
     private void validateSelectors(Descriptor descriptor, Map<String, String> selectors) {
-        Cel typedEnvironment = validationEnvironments.computeIfAbsent(descriptor, d ->
-                CelEnvironmentFactory.builder()
-                        .addMessageType(d)
-                        .addVar("input", StructTypeReference.create(d.getFullName()))
-                        .build());
+        if (validationEnvironments.size() >= MAX_ENVIRONMENTS
+                && !validationEnvironments.containsKey(descriptor)) {
+            validationEnvironments.clear();
+        }
+        ValidationEnvironment environment = validationEnvironments.computeIfAbsent(descriptor, d ->
+                new ValidationEnvironment(
+                        CelEnvironmentFactory.builder()
+                                .addMessageType(d)
+                                .addVar("input", StructTypeReference.create(d.getFullName()))
+                                .build(),
+                        ConcurrentHashMap.newKeySet()));
         selectors.forEach((name, expression) -> {
-            CelValidation.Result result = CelValidation.validate(typedEnvironment, expression);
+            if (environment.validatedExpressions().contains(expression)) {
+                return;
+            }
+            CelValidation.Result result = CelValidation.validate(environment.cel(), expression);
             if (!result.valid()) {
                 throw new IllegalStateException("Invalid metadata selector '" + name
                         + "' (" + expression + "): " + String.join("; ", result.errors()));
             }
+            // The evaluator environment may differ from the typed validation environment;
+            // compile there too (cached, reused by evaluation) so a mismatch surfaces now.
+            try {
+                evaluator.precompile(expression);
+            } catch (CelEvaluationException e) {
+                throw new IllegalStateException("Invalid metadata selector '" + name
+                        + "' (" + expression + "): does not compile in the evaluator environment: "
+                        + e.getMessage(), e);
+            }
+            if (environment.validatedExpressions().size() >= MAX_VALIDATED_EXPRESSIONS) {
+                environment.validatedExpressions().clear();
+            }
+            environment.validatedExpressions().add(expression);
         });
     }
 

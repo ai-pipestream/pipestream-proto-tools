@@ -93,6 +93,34 @@ class MetadataExtractorTest {
                 Map.of("title", "input.title")).get("title"));
     }
 
+    @Test
+    void surfacesEvaluatorEnvironmentMismatchEagerly() {
+        // Typed validation passes, but the injected evaluator's environment has no `input`
+        // variable; the mismatch must surface as an eager invalid-selector error.
+        CelEvaluator evaluator = new CelEvaluator(CelEnvironmentFactory.builder().build());
+        Struct input = Struct.getDefaultInstance();
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> new MetadataExtractor(evaluator).extract(Struct.getDescriptor(), input,
+                        Map.of("title", "input.title")));
+        assertThat(e.getMessage())
+                .contains("Invalid metadata selector")
+                .contains("evaluator environment");
+    }
+
+    @Test
+    void repeatedExtractionReusesValidatedSelectors() {
+        CelEvaluator evaluator = new CelEvaluator(CelEnvironmentFactory.builder()
+                .addMessageType(Struct.getDescriptor()).addVar("input").build());
+        MetadataExtractor extractor = new MetadataExtractor(evaluator);
+        Struct input = Struct.newBuilder()
+                .putFields("title", Value.newBuilder().setStringValue("Hello").build()).build();
+        Map<String, String> selectors = Map.of("title", "input.title");
+        assertEquals("Hello", extractor.extract(Struct.getDescriptor(), input, selectors).get("title"));
+        assertEquals("Hello", extractor.extract(Struct.getDescriptor(), input, selectors).get("title"));
+        // The evaluator compiled the selector exactly once and reuses its cached program.
+        assertEquals(1, evaluator.cacheSize());
+    }
+
     private static Descriptor documentDescriptor() {
         try {
             var document = DescriptorProtos.DescriptorProto.newBuilder().setName("Document")

@@ -31,6 +31,39 @@ class CelProtoMapperTest {
         assertEquals("source-mapped", target.build().getField(descriptor.findFieldByName("output")));
     }
 
+    @Test
+    void mapsProto2BuilderWithUnsetRequiredFields() throws Exception {
+        // proto2 (no syntax set) message with a required field that stays unset during mapping;
+        // bindings must use buildPartial() or DynamicMessage.build() throws
+        // UninitializedMessageException.
+        DescriptorProtos.DescriptorProto document = DescriptorProtos.DescriptorProto.newBuilder()
+                .setName("LegacyDocument")
+                .addField(field("id", 1).toBuilder()
+                        .setLabel(DescriptorProtos.FieldDescriptorProto.Label.LABEL_REQUIRED))
+                .addField(field("title", 2).toBuilder()
+                        .setLabel(DescriptorProtos.FieldDescriptorProto.Label.LABEL_OPTIONAL))
+                .addField(field("output", 3).toBuilder()
+                        .setLabel(DescriptorProtos.FieldDescriptorProto.Label.LABEL_OPTIONAL))
+                .build();
+        Descriptor descriptor = FileDescriptor.buildFrom(DescriptorProtos.FileDescriptorProto.newBuilder()
+                        .setName("cel_proto2.proto").setPackage("ai.pipestream.test.legacy")
+                        .addMessageType(document).build(),
+                new FileDescriptor[]{}).findMessageTypeByName("LegacyDocument");
+
+        Message.Builder target = DynamicMessage.newBuilder(descriptor)
+                .setField(descriptor.findFieldByName("title"), "source");
+        CelEvaluator evaluator = new CelEvaluator(CelEnvironmentFactory.builder()
+                .addMessageType(descriptor).addVar("input").build());
+        CelProtoMapper mapper = new CelProtoMapper(
+                new ProtoFieldMapperImpl(new DescriptorRegistry()), evaluator);
+
+        mapper.map(target, List.of(
+                new CelMappingRule("input.title == 'source'", "input.title + '-mapped'", "output")));
+
+        assertEquals("source-mapped",
+                target.buildPartial().getField(descriptor.findFieldByName("output")));
+    }
+
     private static FileDescriptor testFile() throws Exception {
         DescriptorProtos.DescriptorProto document = DescriptorProtos.DescriptorProto.newBuilder()
                 .setName("Document")
