@@ -9,4 +9,8 @@ public class CelCompilationException extends CelEvaluationException {
     public CelCompilationException(String message) {
         super(message);
     }
+
+    public CelCompilationException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

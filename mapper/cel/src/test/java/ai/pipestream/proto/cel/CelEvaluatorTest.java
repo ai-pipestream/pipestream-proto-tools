@@ -38,4 +38,33 @@ class CelEvaluatorTest {
     @Test void blankExpressionThrows() {
         assertThrows(CelEvaluationException.class, () -> new CelEvaluator().evaluateValue(" ", Map.of()));
     }
+    @Test void compileFailureIsTypedAsCompilationException() {
+        CelEvaluator evaluator = new CelEvaluator();
+        assertThrows(CelCompilationException.class, () -> evaluator.evaluateValue("not valid(", Map.of()));
+        assertThrows(CelCompilationException.class, () -> evaluator.precompile("not valid("));
+    }
+    @Test void compileFailureIsCachedAndNotRecompiled() {
+        CelEvaluator evaluator = new CelEvaluator();
+        CelCompilationException first = assertThrows(CelCompilationException.class,
+                () -> evaluator.evaluateValue("not valid(", Map.of()));
+        CelCompilationException second = assertThrows(CelCompilationException.class,
+                () -> evaluator.evaluateValue("not valid(", Map.of()));
+        assertSame(first, second, "cached compile failure should be rethrown, not recompiled");
+        evaluator.clearCache();
+        CelCompilationException third = assertThrows(CelCompilationException.class,
+                () -> evaluator.evaluateValue("not valid(", Map.of()));
+        assertNotSame(first, third, "clearCache should also clear cached compile failures");
+    }
+    @Test void runtimeFailureIsNotACompilationException() {
+        CelEvaluator evaluator = new CelEvaluator();
+        CelEvaluationException e = assertThrows(CelEvaluationException.class,
+                () -> evaluator.evaluateValue("1 / 0", Map.of()));
+        assertFalse(e instanceof CelCompilationException);
+        assertFalse(evaluator.evaluateBoolean("1 / 0 == 1", Map.of()));
+    }
+    @Test void precompileCachesProgramWithoutEvaluating() {
+        CelEvaluator evaluator = new CelEvaluator();
+        evaluator.precompile("1 + 1");
+        assertEquals(1, evaluator.cacheSize());
+    }
 }

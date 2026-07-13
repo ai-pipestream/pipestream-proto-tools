@@ -84,7 +84,9 @@ public final class CelProtoMapper {
             throws MappingException {
         Objects.requireNonNull(rule, "rule");
         Map<String, Object> bindings = new LinkedHashMap<>(extraBindings);
-        bindings.put(rootVariable, target.build());
+        // buildPartial: the progressive builder state may legitimately have unset proto2
+        // required fields mid-mapping; build() would throw UninitializedMessageException.
+        bindings.put(rootVariable, target.buildPartial());
         if (rule.filterExpression() != null && !rule.filterExpression().isBlank()) {
             // Soft mode skips the rule on filter compile/evaluation errors; strict mode propagates them.
             boolean filterMatches = softSelector
