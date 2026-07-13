@@ -109,8 +109,20 @@ class ProtovalidateRuleSourceTest {
     void celRulesTranslateVerbatim() {
         assertViolation(validUser().setNickname("has space").build(),
                 "nickname", "nickname.no_spaces");
+        // Message-level violations carry an empty field path: the rule targets the message itself.
         assertViolation(validUser().setPlan(Plan.PLAN_PAID).build(),
-                "AnnotatedUser", "user.paid_needs_email");
+                "", "user.paid_needs_email");
+    }
+
+    @Test
+    void uint64CelBindsUnsigned() {
+        // 2^63 binds as a CEL uint (not a negative signed long), so both comparisons pass.
+        assertThat(VALIDATOR.validate(validUser().setBig(Long.MIN_VALUE).build()).valid())
+                .as("2^63 must satisfy 100u < big < uint64 max")
+                .isTrue();
+        // -1 as uint64 is the max value itself; `this < max` must fail.
+        assertViolation(validUser().setBig(-1L).build(), "big", "big.uint64_range");
+        assertViolation(validUser().setBig(50).build(), "big", "big.uint64_range");
     }
 
     @Test

@@ -69,9 +69,18 @@ public record ValidationResult(boolean valid, List<Violation> violations) {
         }
     }
 
-    /** Convenience for callers that already hold a message. */
+    /** Lazily initialized shared validator for {@link #validate(Message)} (holder idiom). */
+    private static final class DefaultValidator {
+        static final ProtoValidator INSTANCE = ProtoValidator.create();
+    }
+
+    /**
+     * Convenience for callers that already hold a message. Uses a shared default validator
+     * (default rule-source chain, default CEL environments) so calling this in a loop does not
+     * rebuild CEL environments or rescan the {@code ServiceLoader} per call.
+     */
     public static ValidationResult validate(Message message) {
-        return ProtoValidator.create().validate(message);
+        return DefaultValidator.INSTANCE.validate(message);
     }
 
     public static void registerExtensions(ExtensionRegistry registry) {

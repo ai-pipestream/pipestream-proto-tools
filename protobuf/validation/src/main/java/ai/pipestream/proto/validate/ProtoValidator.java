@@ -29,7 +29,12 @@ import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.EnumValueDescriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Message;
+import dev.cel.bundle.Cel;
+import dev.cel.common.CelValidationException;
+import dev.cel.common.types.CelKind;
+import dev.cel.common.types.CelType;
 
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -53,6 +58,12 @@ import java.util.regex.PatternSyntaxException;
  * discovered on the classpath via {@link java.util.ServiceLoader}. Every configured source
  * is consulted per field/message and all violations are merged.
  *
+ * <p>The translated rule model is compiled once per message type and cached: regex patterns
+ * and CEL programs are compiled eagerly when a descriptor's rules are first assembled, so
+ * schema errors ({@link RuleCompilationException}) surface deterministically — even for
+ * fields the validated message leaves unset. Value-dependent failures (a CEL runtime error,
+ * undecodable bytes) throw {@link RuleEvaluationException} instead.
+ *
  * <p>Presence semantics: standard rules run only when the field is present (proto3
  * semantics — non-zero/non-empty, or {@code hasField} for explicit presence). Repeated
  * and map fields are the exception: collection rules ({@code repeated.min_items},
@@ -67,6 +78,14 @@ public final class ProtoValidator {
     private static final String TIMESTAMP_TYPE = "google.protobuf.Timestamp";
     private static final String DURATION_TYPE = "google.protobuf.Duration";
 
+    /** Maximum message nesting the recursive walk follows before failing the evaluation. */
+    private static final int MAX_NESTING_DEPTH = 500;
+    // Cache bounds. All caches are simple clear-on-threshold: when full they are wiped and
+    // repopulated on demand, which keeps them thread-safe and dependency-free while preventing
+    // unbounded growth for callers that validate many distinct (e.g. dynamically built) types.
+    private static final int MAX_CACHED_TYPES = 256;
+    private static final int MAX_CACHED_PATTERNS = 512;
+
     /** Well-known wrapper message types mapped to the scalar family that validates their value. */
     private static final Map<String, FieldDescriptor.JavaType> WRAPPER_TYPES = Map.of(
             "google.protobuf.Int32Value", FieldDescriptor.JavaType.INT,
@@ -79,12 +98,38 @@ public final class ProtoValidator {
             "google.protobuf.StringValue", FieldDescriptor.JavaType.STRING,
             "google.protobuf.BytesValue", FieldDescriptor.JavaType.BYTE_STRING);
 
-    private final CelEvaluator fieldCel;
+    /** Compiled regex patterns shared across validators, keyed by the pattern source. */
+    private static final Map<String, Pattern> PATTERNS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * A CEL environment paired with its evaluator. The raw {@link Cel} handle enables static
+     * checks (compile errors, result type) when the environment was built by this class; it is
+     * null for caller-supplied evaluators, where compilation is triggered through the evaluator.
+     */
+    private record CelHandle(Cel cel, CelEvaluator evaluator) {
+    }
+
+    /**
+     * The fully translated and eagerly compiled rules for one message type: per-field
+     * constraints from every source, the non-empty message-level constraints, and the names of
+     * fields governed by a message-level oneof rule.
+     */
+    private record CompiledRules(
+            Map<FieldDescriptor, List<FieldConstraints>> fields,
+            List<MessageConstraints> messages,
+            Set<String> oneofMembers) {
+    }
+
+    private final CelHandle fieldCel;
     private final CelEvaluator messageCel;
     private final List<ValidationRuleSource> sources;
     // Message-level CEL is compiled with `this` typed as the message under validation, so a rule on
     // a nested message sees its own fields. Evaluators are built lazily and cached per descriptor.
-    private final java.util.Map<Descriptor, CelEvaluator> messageCelByType =
+    private final Map<Descriptor, CelHandle> messageCelByType =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    // Translated + compiled rule model per message type (see CompiledRules).
+    private final Map<Descriptor, CompiledRules> rulesByType =
             new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Uses the default rule-source chain ({@link ValidationRuleSources#defaults()}). */
@@ -94,7 +139,12 @@ public final class ProtoValidator {
 
     public ProtoValidator(
             CelEvaluator fieldCel, CelEvaluator messageCel, List<ValidationRuleSource> sources) {
-        this.fieldCel = Objects.requireNonNull(fieldCel, "fieldCel");
+        this(new CelHandle(null, Objects.requireNonNull(fieldCel, "fieldCel")), messageCel, sources);
+    }
+
+    private ProtoValidator(
+            CelHandle fieldCel, CelEvaluator messageCel, List<ValidationRuleSource> sources) {
+        this.fieldCel = fieldCel;
         this.messageCel = Objects.requireNonNull(messageCel, "messageCel");
         this.sources = List.copyOf(Objects.requireNonNull(sources, "sources"));
     }
@@ -106,26 +156,33 @@ public final class ProtoValidator {
 
     /** As {@link #create()} but with an explicit rule-source chain. */
     public static ProtoValidator create(List<ValidationRuleSource> sources) {
-        CelEvaluator field = new CelEvaluator(celEnv().build());
-        CelEvaluator message = new CelEvaluator(celEnv().build());
-        return new ProtoValidator(field, message, sources);
+        Cel fieldEnv = celEnv().build();
+        return new ProtoValidator(
+                new CelHandle(fieldEnv, new CelEvaluator(fieldEnv)),
+                new CelEvaluator(celEnv().build()),
+                sources);
     }
 
     /**
-     * A CEL environment with {@code this} bound and the format standard-library functions
-     * (isHostname/isEmail/isIp/isIpPrefix/isUri/isUriRef/isHostAndPort/isNan/isInf) registered.
+     * A CEL environment with {@code this}, {@code now} and {@code rule} bound and the format
+     * standard-library functions (isHostname/isEmail/isIp/isIpPrefix/isUri/isUriRef/
+     * isHostAndPort/isNan/isInf) registered. {@code rule} carries a predefined rule's
+     * configured value; it is unbound for ordinary custom rules.
      */
     private static CelEnvironmentFactory celEnv() {
         return CelEnvironmentFactory.builder()
                 .addVar("this")
                 .addVar("now")
+                .addVar("rule")
                 .addFunctions(ValidationCelFunctions.declarations(), ValidationCelFunctions.bindings());
     }
 
-    /** A message-level CEL evaluator whose {@code this} is typed as {@code descriptor}. */
-    private CelEvaluator messageCelFor(Descriptor descriptor) {
-        return messageCelByType.computeIfAbsent(descriptor,
-                d -> new CelEvaluator(celEnv().addMessageVar("this", d).build()));
+    /** A message-level CEL environment whose {@code this} is typed as {@code descriptor}. */
+    private CelHandle messageCelFor(Descriptor descriptor) {
+        return cached(messageCelByType, MAX_CACHED_TYPES, descriptor, d -> {
+            Cel env = celEnv().addMessageVar("this", d).build();
+            return new CelHandle(env, new CelEvaluator(env));
+        });
     }
 
     /**
@@ -140,40 +197,175 @@ public final class ProtoValidator {
     public static ProtoValidator forMessageType(
             Descriptor descriptor, List<ValidationRuleSource> sources) {
         Objects.requireNonNull(descriptor, "descriptor");
-        CelEvaluator field = new CelEvaluator(celEnv().build());
+        Cel fieldEnv = celEnv().build();
         // Declaring `this` as the concrete message type lets message-level CEL type-check field
         // access (this.foo), surfacing type/field mismatches as compilation errors.
-        CelEvaluator message = new CelEvaluator(celEnv().addMessageVar("this", descriptor).build());
-        return new ProtoValidator(field, message, sources);
+        Cel messageEnv = celEnv().addMessageVar("this", descriptor).build();
+        return new ProtoValidator(
+                new CelHandle(fieldEnv, new CelEvaluator(fieldEnv)),
+                new CelEvaluator(messageEnv),
+                sources);
     }
 
     public ValidationResult validate(Message message) {
         Objects.requireNonNull(message, "message");
         List<ValidationResult.Violation> violations = new ArrayList<>();
         Descriptor descriptor = message.getDescriptorForType();
+        CompiledRules rules = rulesFor(descriptor);
         for (FieldDescriptor field : descriptor.getFields()) {
-            validateField(message, field, field.getName(), violations);
+            validateField(message, rules, field, field.getName(), 0, violations);
         }
-        validateMessageRules(message, descriptor, "", violations);
+        validateMessageRules(message, descriptor, rules, "", violations);
         return violations.isEmpty()
                 ? ValidationResult.ok()
                 : ValidationResult.failed(violations);
     }
 
-    private List<FieldConstraints> fieldConstraints(FieldDescriptor field) {
-        List<FieldConstraints> collected = new ArrayList<>(sources.size());
-        for (ValidationRuleSource source : sources) {
-            source.fieldConstraints(field).ifPresent(collected::add);
-        }
-        return collected;
+    // ---- rule model assembly and eager compilation ----
+
+    private CompiledRules rulesFor(Descriptor descriptor) {
+        return cached(rulesByType, MAX_CACHED_TYPES, descriptor, this::compileRules);
     }
+
+    /**
+     * Translates every source's rules for {@code descriptor} and compiles them up front:
+     * regex patterns and CEL programs are compiled here, and oneof rules are checked against
+     * the descriptor, so malformed rules throw {@link RuleCompilationException} on the first
+     * validation of the type regardless of which fields the message populates.
+     */
+    private CompiledRules compileRules(Descriptor descriptor) {
+        Map<FieldDescriptor, List<FieldConstraints>> fields = new java.util.LinkedHashMap<>();
+        for (FieldDescriptor field : descriptor.getFields()) {
+            List<FieldConstraints> collected = new ArrayList<>(sources.size());
+            for (ValidationRuleSource source : sources) {
+                source.fieldConstraints(field).ifPresent(collected::add);
+            }
+            for (FieldConstraints constraints : collected) {
+                compileFieldConstraints(constraints);
+            }
+            fields.put(field, List.copyOf(collected));
+        }
+        List<MessageConstraints> messages = new ArrayList<>();
+        Set<String> oneofMembers = new HashSet<>();
+        for (ValidationRuleSource source : sources) {
+            MessageConstraints constraints = source.messageConstraints(descriptor).orElse(null);
+            if (constraints == null || constraints.isEmpty()) {
+                continue;
+            }
+            messages.add(constraints);
+            // Unknown names in oneof rules are schema errors: silently treating them as
+            // unpopulated (or ignoring the rule) would hide typos in third-party rule sources.
+            for (MessageConstraints.Oneof oneof : constraints.oneofs()) {
+                for (String name : oneof.fields()) {
+                    if (descriptor.findFieldByName(name) == null) {
+                        throw new RuleCompilationException(
+                                "field " + name + " not found in message " + descriptor.getFullName());
+                    }
+                    oneofMembers.add(name);
+                }
+            }
+            for (String oneofName : constraints.requiredOneofs()) {
+                if (descriptor.getRealOneofs().stream().noneMatch(o -> o.getName().equals(oneofName))) {
+                    throw new RuleCompilationException(
+                            "oneof " + oneofName + " not found in message " + descriptor.getFullName());
+                }
+            }
+            CelHandle handle = messageCelFor(descriptor);
+            for (CelConstraint rule : constraints.cel()) {
+                compileCel(handle, rule);
+            }
+        }
+        return new CompiledRules(fields, List.copyOf(messages), Set.copyOf(oneofMembers));
+    }
+
+    /** Compiles every pattern and CEL rule in {@code constraints}, including nested element rules. */
+    private void compileFieldConstraints(FieldConstraints constraints) {
+        constraints.string().ifPresent(s -> s.pattern().ifPresent(ProtoValidator::compiledPattern));
+        constraints.bytes().ifPresent(b -> b.pattern().ifPresent(ProtoValidator::compiledPattern));
+        for (CelConstraint rule : constraints.cel()) {
+            compileCel(fieldCel, rule);
+        }
+        constraints.repeated().flatMap(RepeatedConstraints::items)
+                .ifPresent(this::compileFieldConstraints);
+        constraints.map().ifPresent(m -> {
+            m.keys().ifPresent(this::compileFieldConstraints);
+            m.values().ifPresent(this::compileFieldConstraints);
+        });
+    }
+
+    /**
+     * Compiles a CEL rule eagerly. With a {@link Cel} handle the expression is type-checked and
+     * its static result type verified (protovalidate rejects rules that return neither bool nor
+     * string at compile time); with only an evaluator, compilation is triggered through it and
+     * evaluation errors from unbound variables are ignored — they are not compile errors.
+     */
+    private static void compileCel(CelHandle handle, CelConstraint rule) {
+        if (rule.expression().isBlank()) {
+            return;
+        }
+        if (handle.cel() != null) {
+            CelType result;
+            try {
+                result = handle.cel().compile(rule.expression()).getAst().getResultType();
+            } catch (CelValidationException e) {
+                throw new RuleCompilationException("Invalid CEL expression: " + e.getMessage(), e);
+            }
+            CelKind kind = result.kind();
+            if (kind != CelKind.BOOL && kind != CelKind.STRING
+                    && kind != CelKind.DYN && kind != CelKind.ANY && kind != CelKind.ERROR) {
+                throw new RuleCompilationException(
+                        "CEL rule must return bool or string, got " + result.name());
+            }
+        } else {
+            try {
+                handle.evaluator().evaluateValue(rule.expression(), Map.of());
+            } catch (CelCompilationException e) {
+                throw new RuleCompilationException(e.getMessage(), e);
+            } catch (CelEvaluationException ignored) {
+                // Compiled fine; failing on unbound `this`/`now`/`rule` here is expected.
+            }
+        }
+    }
+
+    /** The compiled form of {@code pattern}; an uncompilable pattern is a schema error. */
+    private static Pattern compiledPattern(String pattern) {
+        Pattern existing = PATTERNS.get(pattern);
+        if (existing != null) {
+            return existing;
+        }
+        try {
+            if (PATTERNS.size() >= MAX_CACHED_PATTERNS) {
+                PATTERNS.clear();
+            }
+            return PATTERNS.computeIfAbsent(pattern, Pattern::compile);
+        } catch (PatternSyntaxException e) {
+            throw new RuleCompilationException("invalid regex pattern: " + e.getMessage(), e);
+        }
+    }
+
+    /** Clear-on-threshold cache lookup (see the cache-bounds note on the constants). */
+    private static <K, V> V cached(
+            Map<K, V> cache, int maxSize, K key, java.util.function.Function<K, V> compute) {
+        V existing = cache.get(key);
+        if (existing != null) {
+            return existing;
+        }
+        if (cache.size() >= maxSize) {
+            cache.clear();
+        }
+        return cache.computeIfAbsent(key, compute);
+    }
+
+    // ---- field walk ----
 
     private void validateField(
             Message message,
+            CompiledRules rules,
             FieldDescriptor field,
             String path,
+            int depth,
             List<ValidationResult.Violation> violations) {
-        List<FieldConstraints> constraints = fieldConstraints(field);
+        List<FieldConstraints> constraints = rules.fields().get(field);
         IgnoreMode ignore = effectiveIgnore(constraints);
         if (ignore == IgnoreMode.ALWAYS) {
             return;
@@ -190,13 +382,13 @@ public final class ProtoValidator {
         // zero value, so min_items / bounds on a zero apply. Members of a message-level oneof rule are
         // treated as presence-tracking too: their field-level rules only apply when populated.
         boolean skipWhenEmpty = field.hasPresence() || ignore == IgnoreMode.IF_ZERO_VALUE
-                || isMessageOneofMember(field);
+                || rules.oneofMembers().contains(field.getName());
         if (skipWhenEmpty && !hasField) {
             return;
         }
 
         if (field.isMapField()) {
-            validateMap(message, field, constraints, path, violations);
+            validateMap(message, field, constraints, path, depth, violations);
             // A field-level CEL rule on a map binds `this` to the whole map, evaluated once.
             Object celMap = celMapValue(message, field);
             for (FieldConstraints c : constraints) {
@@ -205,7 +397,7 @@ public final class ProtoValidator {
             return;
         }
         if (field.isRepeated()) {
-            validateRepeated(message, field, constraints, path, violations);
+            validateRepeated(message, field, constraints, path, depth, violations);
             // A field-level CEL rule on a repeated field binds `this` to the whole list.
             Object celList = celListValue(message, field);
             for (FieldConstraints c : constraints) {
@@ -217,19 +409,25 @@ public final class ProtoValidator {
         Object value = message.getField(field);
         for (FieldConstraints c : constraints) {
             applyFieldConstraints(field, c, value, path, violations);
-            runFieldCel(c, value, path, violations);
+            runFieldCel(c, celScalar(field, value), path, violations);
         }
         if (value instanceof Message nested) {
-            validateChildren(nested, path, violations);
+            validateChildren(nested, path, depth, violations);
         }
     }
 
     private void validateChildren(
-            Message nested, String path, List<ValidationResult.Violation> violations) {
-        for (FieldDescriptor child : nested.getDescriptorForType().getFields()) {
-            validateField(nested, child, path + "." + child.getName(), violations);
+            Message nested, String path, int depth, List<ValidationResult.Violation> violations) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            throw new RuleEvaluationException(
+                    "message nesting exceeds " + MAX_NESTING_DEPTH + " levels at " + path);
         }
-        validateMessageRules(nested, nested.getDescriptorForType(), path, violations);
+        Descriptor descriptor = nested.getDescriptorForType();
+        CompiledRules rules = rulesFor(descriptor);
+        for (FieldDescriptor child : descriptor.getFields()) {
+            validateField(nested, rules, child, path + "." + child.getName(), depth + 1, violations);
+        }
+        validateMessageRules(nested, descriptor, rules, path, violations);
     }
 
     private void validateRepeated(
@@ -237,6 +435,7 @@ public final class ProtoValidator {
             FieldDescriptor field,
             List<FieldConstraints> constraints,
             String path,
+            int depth,
             List<ValidationResult.Violation> violations) {
         int count = message.getRepeatedFieldCount(field);
         for (FieldConstraints c : constraints) {
@@ -255,7 +454,8 @@ public final class ProtoValidator {
             if (r.unique()) {
                 Set<Object> seen = new HashSet<>();
                 for (int i = 0; i < count; i++) {
-                    if (!seen.add(message.getRepeatedField(field, i))) {
+                    Object element = uniqueKey(message.getRepeatedField(field, i));
+                    if (element != null && !seen.add(element)) {
                         // A single violation on the repeated field itself, not per duplicate element.
                         violations.add(violation(path, "repeated.unique",
                                 "repeated values must be unique"));
@@ -279,12 +479,27 @@ public final class ProtoValidator {
                     continue;
                 }
                 applyFieldConstraints(field, items, element, elementPath, violations);
-                runFieldCel(items, element, elementPath, violations);
+                runFieldCel(items, celScalar(field, element), elementPath, violations);
             }
             if (!skipElement && element instanceof Message nested) {
-                validateChildren(nested, elementPath, violations);
+                validateChildren(nested, elementPath, depth, violations);
             }
         }
+    }
+
+    /**
+     * The identity used for {@code repeated.unique} duplicate detection, matching CEL numeric
+     * equality: {@code -0.0} equals {@code 0.0}, and {@code NaN} equals nothing — a NaN element
+     * (returned as null) can never be a duplicate.
+     */
+    private static Object uniqueKey(Object element) {
+        if (element instanceof Double d) {
+            return Double.isNaN(d) ? null : (d == 0.0d ? Double.valueOf(0.0d) : d);
+        }
+        if (element instanceof Float f) {
+            return Float.isNaN(f) ? null : (f == 0.0f ? Float.valueOf(0.0f) : f);
+        }
+        return element;
     }
 
     private void validateMap(
@@ -292,6 +507,7 @@ public final class ProtoValidator {
             FieldDescriptor field,
             List<FieldConstraints> constraints,
             String path,
+            int depth,
             List<ValidationResult.Violation> violations) {
         int count = message.getRepeatedFieldCount(field);
         for (FieldConstraints c : constraints) {
@@ -323,25 +539,29 @@ public final class ProtoValidator {
                     m.keys().ifPresent(k -> {
                         if (!skipValue(k, key, keyField)) {
                             applyFieldConstraints(keyField, k, key, keyPath, violations);
-                            runFieldCel(k, key, keyPath, violations);
+                            runFieldCel(k, celScalar(keyField, key), keyPath, violations);
                         }
                     });
                     m.values().ifPresent(v -> {
                         if (!skipValue(v, value, valueField)) {
                             applyFieldConstraints(valueField, v, value, entryPath, violations);
-                            runFieldCel(v, value, entryPath, violations);
+                            runFieldCel(v, celScalar(valueField, value), entryPath, violations);
                         }
                     });
                 }
             }
             if (value instanceof Message nested) {
-                validateChildren(nested, entryPath, violations);
+                validateChildren(nested, entryPath, depth, violations);
             }
         }
     }
 
     private static String subscript(Object key) {
-        return key instanceof String s ? "[\"" + s + "\"]" : "[" + key + "]";
+        if (key instanceof String s) {
+            // Escape backslash and quote so the quoted key round-trips unambiguously.
+            return "[\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"]";
+        }
+        return "[" + key + "]";
     }
 
     private static void applyFieldConstraints(
@@ -492,15 +712,9 @@ public final class ProtoValidator {
                         "must be at most " + rules.maxBytes().getAsLong() + " bytes"));
             }
         }
-        if (rules.pattern().isPresent()) {
-            try {
-                if (!Pattern.compile(rules.pattern().get()).matcher(value).find()) {
-                    violations.add(violation(path, "string.pattern", "value does not match pattern"));
-                }
-            } catch (PatternSyntaxException e) {
-                violations.add(violation(path, "string.pattern",
-                        "invalid pattern: " + e.getMessage()));
-            }
+        if (rules.pattern().isPresent()
+                && !compiledPattern(rules.pattern().get()).matcher(value).find()) {
+            violations.add(violation(path, "string.pattern", "value does not match pattern"));
         }
         if (rules.prefix().isPresent() && !value.startsWith(rules.prefix().get())) {
             violations.add(violation(path, "string.prefix",
@@ -675,15 +889,28 @@ public final class ProtoValidator {
         applyDoubleRange(prefix, path, value,
                 boxed(rules.gt()), boxed(rules.gte()), boxed(rules.lt()), boxed(rules.lte()),
                 violations);
-        if (!rules.in().isEmpty() && !rules.in().contains(value)) {
+        if (!rules.in().isEmpty() && !containsNumeric(rules.in(), value)) {
             violations.add(violation(path, prefix + ".in", "must be one of the allowed values"));
         }
-        if (!rules.notIn().isEmpty() && rules.notIn().contains(value)) {
+        if (!rules.notIn().isEmpty() && containsNumeric(rules.notIn(), value)) {
             violations.add(violation(path, prefix + ".not_in", "must not be one of the forbidden values"));
         }
         if (rules.finite() && !Double.isFinite(value)) {
             violations.add(violation(path, prefix + ".finite", "must be finite"));
         }
+    }
+
+    /**
+     * Membership by IEEE numeric equality, matching CEL: {@code -0.0} equals {@code 0.0} and
+     * {@code NaN} equals nothing — boxed {@link Double#equals} gets both edge cases wrong.
+     */
+    private static boolean containsNumeric(List<Double> values, double value) {
+        for (double candidate : values) {
+            if (candidate == value) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void applyBool(
@@ -726,14 +953,11 @@ public final class ProtoValidator {
             // protovalidate applies the pattern to the value decoded as UTF-8; non-UTF-8 bytes are a
             // runtime error rather than a validation failure.
             if (!decodesAsUtf8(value)) {
-                throw new IllegalStateException("value must be valid UTF-8 to apply regexp");
+                throw new RuleEvaluationException(
+                        "bytes.pattern", "value must be valid UTF-8 to apply regexp", null);
             }
-            try {
-                if (!Pattern.compile(rules.pattern().get()).matcher(value.toStringUtf8()).find()) {
-                    violations.add(violation(path, "bytes.pattern", "value does not match pattern"));
-                }
-            } catch (PatternSyntaxException e) {
-                violations.add(violation(path, "bytes.pattern", "invalid pattern: " + e.getMessage()));
+            if (!compiledPattern(rules.pattern().get()).matcher(value.toStringUtf8()).find()) {
+                violations.add(violation(path, "bytes.pattern", "value does not match pattern"));
             }
         }
         if (!rules.in().isEmpty() && !rules.in().contains(value)) {
@@ -852,46 +1076,58 @@ public final class ProtoValidator {
         Descriptor d = timestamp.getDescriptorForType();
         long seconds = (Long) timestamp.getField(d.findFieldByName("seconds"));
         int nanos = (Integer) timestamp.getField(d.findFieldByName("nanos"));
-        return Instant.ofEpochSecond(seconds, nanos);
+        try {
+            return Instant.ofEpochSecond(seconds, nanos);
+        } catch (DateTimeException | ArithmeticException e) {
+            // Out-of-range seconds/nanos are a runtime failure, not a raw unchecked leak.
+            throw new RuleEvaluationException("timestamp value out of range: " + e.getMessage(), e);
+        }
     }
 
     private static Duration toJavaDuration(Message duration) {
         Descriptor d = duration.getDescriptorForType();
         long seconds = (Long) duration.getField(d.findFieldByName("seconds"));
         int nanos = (Integer) duration.getField(d.findFieldByName("nanos"));
-        return Duration.ofSeconds(seconds, nanos);
+        try {
+            return Duration.ofSeconds(seconds, nanos);
+        } catch (DateTimeException | ArithmeticException e) {
+            throw new RuleEvaluationException("duration value out of range: " + e.getMessage(), e);
+        }
     }
 
+    /** Runs a field's CEL rules against an already CEL-converted {@code this} value. */
     private void runFieldCel(
-            FieldConstraints constraints, Object value, String path,
+            FieldConstraints constraints, Object celValue, String path,
             List<ValidationResult.Violation> violations) {
         if (constraints.cel().isEmpty()) {
             return;
         }
-        Object celValue = value instanceof EnumValueDescriptor evd ? (long) evd.getNumber() : value;
-        // cel[N] and cel_expression[N] are indexed independently within their own repeated field.
+        // cel[N] and cel_expression[N] are indexed independently within their own repeated field;
+        // predefined rules carry an explicit extension-shaped rule path instead.
         Map<String, Integer> next = new java.util.HashMap<>();
         for (CelConstraint rule : constraints.cel()) {
-            int i = next.merge(rule.celField(), 1, Integer::sum) - 1;
-            evalCel(fieldCel, rule, celValue, path, rule.celField() + "[" + i + "]", violations);
+            String rulePath = rule.rulePath();
+            if (rulePath.isEmpty()) {
+                int i = next.merge(rule.celField(), 1, Integer::sum) - 1;
+                rulePath = rule.celField() + "[" + i + "]";
+            }
+            evalCel(fieldCel.evaluator(), rule, celValue, path, rulePath, violations);
         }
     }
 
     private void validateMessageRules(
             Message message,
             Descriptor descriptor,
+            CompiledRules rules,
             String path,
             List<ValidationResult.Violation> violations) {
-        for (ValidationRuleSource source : sources) {
-            MessageConstraints constraints = source.messageConstraints(descriptor).orElse(null);
-            if (constraints == null || constraints.isEmpty()) {
-                continue;
-            }
-            String msgPath = path.isEmpty() ? descriptor.getName() : path;
-            // Message-level CEL rules report no FieldRules rule path (they are not on any field).
-            CelEvaluator evaluator = messageCelFor(descriptor);
+        for (MessageConstraints constraints : rules.messages()) {
+            // Message-level CEL rules report no FieldRules rule path (they are not on any field),
+            // and top-level violations carry an empty field path: the rule targets the message
+            // itself, not any named field.
+            CelEvaluator evaluator = messageCelFor(descriptor).evaluator();
             for (CelConstraint rule : constraints.cel()) {
-                evalCel(evaluator, rule, message, msgPath, "", violations);
+                evalCel(evaluator, rule, message, path, "", violations);
             }
             for (MessageConstraints.Oneof oneof : constraints.oneofs()) {
                 validateMessageOneof(message, descriptor, oneof, path, violations);
@@ -905,6 +1141,7 @@ public final class ProtoValidator {
     /**
      * A real protobuf oneof marked {@code required}: exactly one member must be set. The violation
      * reports {@code required} on the oneof name itself (a bare {@code field_name} path element).
+     * The oneof's existence was checked when the rule model was compiled.
      */
     private static void validateRequiredOneof(
             Message message,
@@ -915,8 +1152,9 @@ public final class ProtoValidator {
         var oneof = descriptor.getRealOneofs().stream()
                 .filter(o -> o.getName().equals(oneofName))
                 .findFirst()
-                .orElse(null);
-        if (oneof != null && !message.hasOneof(oneof)) {
+                .orElseThrow(() -> new RuleCompilationException(
+                        "oneof " + oneofName + " not found in message " + descriptor.getFullName()));
+        if (!message.hasOneof(oneof)) {
             String oneofPath = path.isEmpty() ? oneofName : path + "." + oneofName;
             violations.add(new ValidationResult.Violation(
                     oneofPath, "required", "exactly one field is required in oneof"));
@@ -926,7 +1164,8 @@ public final class ProtoValidator {
     /**
      * A message-level {@code oneof} rule: at most one member may be populated, and when
      * {@code required} at least one must be. Both failures report {@code message.oneof} on the
-     * message path with the member list spelled out, matching protovalidate's wording.
+     * message path with the member list spelled out, matching protovalidate's wording. Member
+     * names were resolved against the descriptor when the rule model was compiled.
      */
     private static void validateMessageOneof(
             Message message,
@@ -937,7 +1176,11 @@ public final class ProtoValidator {
         int populated = 0;
         for (String name : oneof.fields()) {
             FieldDescriptor fd = descriptor.findFieldByName(name);
-            if (fd != null && isPresent(message, fd)) {
+            if (fd == null) {
+                throw new RuleCompilationException(
+                        "field " + name + " not found in message " + descriptor.getFullName());
+            }
+            if (isPresent(message, fd)) {
                 populated++;
             }
         }
@@ -968,6 +1211,10 @@ public final class ProtoValidator {
             bindings.put("this", thisValue);
             // protovalidate exposes the current time as `now`; a single value keeps now == now true.
             bindings.put("now", java.time.Instant.now());
+            if (rule.ruleValue() != null) {
+                // Predefined rules see their configured value as `rule`.
+                bindings.put("rule", rule.ruleValue());
+            }
             Object result = evaluator.evaluateValue(rule.expression(), bindings);
             if (result instanceof Boolean ok) {
                 if (!ok) {
@@ -980,15 +1227,17 @@ public final class ProtoValidator {
                     violations.add(new ValidationResult.Violation(path, id, text, rulePath));
                 }
             } else {
+                // Statically bool/string-typed programs never land here; a dyn program returning
+                // another type is still a per-value failure.
                 violations.add(new ValidationResult.Violation(
                         path, id, "CEL rule must return bool or string", rulePath));
             }
         } catch (CelCompilationException e) {
             // A rule whose CEL does not compile (type error, unknown field) is a compilation error.
-            throw new RuleCompilationException(e.getMessage());
+            throw new RuleCompilationException(e.getMessage(), e);
         } catch (CelEvaluationException e) {
             // A rule that compiles but fails at evaluation is a runtime error, not a violation.
-            throw new IllegalStateException("CEL runtime error: " + e.getMessage(), e);
+            throw new RuleEvaluationException(id, "CEL runtime error: " + e.getMessage(), e);
         }
     }
 
@@ -1025,8 +1274,26 @@ public final class ProtoValidator {
             case INT32, SINT32, SFIXED32 -> ((Integer) value).longValue();
             case FLOAT -> ((Float) value).doubleValue();
             case ENUM -> (long) ((EnumValueDescriptor) value).getNumber();
+            case MESSAGE, GROUP -> celMessage((Message) value);
             default -> value;
         };
+    }
+
+    /** Wrapper messages bind as their unwrapped scalar; Timestamp/Duration as temporal values. */
+    private static Object celMessage(Message value) {
+        Descriptor descriptor = value.getDescriptorForType();
+        String type = descriptor.getFullName();
+        if (TIMESTAMP_TYPE.equals(type)) {
+            return toInstant(value);
+        }
+        if (DURATION_TYPE.equals(type)) {
+            return toJavaDuration(value);
+        }
+        if (WRAPPER_TYPES.containsKey(type)) {
+            FieldDescriptor inner = descriptor.findFieldByNumber(1);
+            return celScalar(inner, value.getField(inner));
+        }
+        return value;
     }
 
     /** Whether an element (repeated item, map key/value) is skipped by its own ignore mode. */
@@ -1053,23 +1320,6 @@ public final class ProtoValidator {
     }
 
     /** The strongest ignore mode declared across a field's rule sources. */
-    /** True when {@code field} is named by a message-level oneof rule on its containing message. */
-    private boolean isMessageOneofMember(FieldDescriptor field) {
-        Descriptor type = field.getContainingType();
-        for (ValidationRuleSource source : sources) {
-            MessageConstraints mc = source.messageConstraints(type).orElse(null);
-            if (mc == null) {
-                continue;
-            }
-            for (MessageConstraints.Oneof oneof : mc.oneofs()) {
-                if (oneof.fields().contains(field.getName())) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     private static IgnoreMode effectiveIgnore(List<FieldConstraints> constraints) {
         IgnoreMode mode = IgnoreMode.UNSPECIFIED;
         for (FieldConstraints c : constraints) {
@@ -1095,7 +1345,9 @@ public final class ProtoValidator {
             case ENUM -> ((EnumValueDescriptor) value).getNumber() != 0;
             case BOOLEAN -> (Boolean) value;
             case INT, LONG -> ((Number) value).longValue() != 0L;
-            case FLOAT, DOUBLE -> ((Number) value).doubleValue() != 0.0d;
+            // Bitwise comparison so -0.0 counts as set (its raw bits differ from +0.0).
+            case FLOAT, DOUBLE ->
+                    Double.doubleToRawLongBits(((Number) value).doubleValue()) != 0L;
             default -> true;
         };
     }
