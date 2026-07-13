@@ -1,7 +1,7 @@
 description = 'Engine-agnostic protobuf → NDJSON encoding'
 
 dependencies {
-    api project(':pipestream-proto-tools-descriptors')
+    api project(':proteus-descriptors')
     api libs.protobuf.java.util
     // Message bodies use protobuf JsonFormat; the small bulk-action envelope uses Jackson so no
     // JSON is escaped by hand.

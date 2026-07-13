@@ -5,7 +5,7 @@ plugins {
 description = 'Optional protovalidate (buf.validate) rule-source dialect for the validation standard'
 
 dependencies {
-    api project(':pipestream-proto-tools-protobuf-validation')
+    api project(':proteus-protobuf-validation')
 }
 
 protobuf {

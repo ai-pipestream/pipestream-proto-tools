@@ -5,9 +5,9 @@ plugins {
 description = 'Protobuf validation standard — CEL-driven field and message constraints'
 
 dependencies {
-    api project(':pipestream-proto-tools-mapper-cel')
+    api project(':proteus-mapper-cel')
     api libs.protobuf.java
-    implementation project(':pipestream-proto-tools-formats')
+    implementation project(':proteus-formats')
 }
 
 protobuf {

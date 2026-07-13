@@ -3,7 +3,7 @@ description = 'Apicurio Registry descriptor loader - Quarkus deployment'
 dependencies {
     implementation platform(libs.quarkus.bom)
     implementation 'io.quarkus:quarkus-arc-deployment'
-    implementation project(':pipestream-proto-tools-schema-apicurio')
+    implementation project(':proteus-schema-apicurio')
 
     annotationProcessor platform(libs.quarkus.bom)
     annotationProcessor 'io.quarkus:quarkus-extension-processor'

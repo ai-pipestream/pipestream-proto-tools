@@ -53,6 +53,12 @@ subprojects {
             }
         }
 
+        // Library baseline is JDK 21: compile against the 21 API and emit 21 bytecode,
+        // while the toolchain above lets contributors build and test on newer JDKs.
+        tasks.withType(JavaCompile).configureEach {
+            options.release = 21
+        }
+
         tasks.withType(Test).configureEach {
             useJUnitPlatform()
             maxParallelForks = Math.max(1, Runtime.runtime.availableProcessors().intdiv(2))
@@ -89,16 +95,17 @@ subprojects {
                 create('maven', MavenPublication) {
                     if (project.name == 'bom') {
                         from components.javaPlatform
-                        artifactId = 'pipestream-proto-tools-bom'
+                        artifactId = 'proteus-bom'
                     } else {
                         from components.java
                     }
                     pom {
                         name = project.name == 'bom'
-                            ? 'Pipestream Proto Tools BOM'
+                            ? 'Proteus BOM'
                             : project.name
-                        description = project.description ?: 'Pipestream protobuf tooling'
-                        url = 'https://github.com/ai-pipestream/pipestream-proto-tools'
+                        // Lazy: module build scripts set `description` after this block runs.
+                        description = providers.provider { project.description ?: 'Proteus protobuf tooling' }
+                        url = 'https://github.com/ai-pipestream/proteus'
                         licenses {
                             license {
                                 name = 'MIT License'
@@ -106,20 +113,20 @@ subprojects {
                             }
                         }
                         scm {
-                            connection = 'scm:git:https://github.com/ai-pipestream/pipestream-proto-tools.git'
-                            developerConnection = 'scm:git:ssh://git@github.com/ai-pipestream/pipestream-proto-tools.git'
-                            url = 'https://github.com/ai-pipestream/pipestream-proto-tools'
+                            connection = 'scm:git:https://github.com/ai-pipestream/proteus.git'
+                            developerConnection = 'scm:git:ssh://git@github.com/ai-pipestream/proteus.git'
+                            url = 'https://github.com/ai-pipestream/proteus'
                         }
                     }
                 }
                 if (project.name == 'bom') {
                     create('catalog', MavenPublication) {
                         from components.versionCatalog
-                        artifactId = 'pipestream-proto-tools-bom-catalog'
+                        artifactId = 'proteus-bom-catalog'
                         pom {
-                            name = 'Pipestream Proto Tools BOM Catalog'
-                            description = 'Gradle version catalog for Pipestream protobuf tools'
-                            url = 'https://github.com/ai-pipestream/pipestream-proto-tools'
+                            name = 'Proteus BOM Catalog'
+                            description = 'Gradle version catalog for Proteus protobuf tools'
+                            url = 'https://github.com/ai-pipestream/proteus'
                         }
                     }
                 }

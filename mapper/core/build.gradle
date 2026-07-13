@@ -1,7 +1,7 @@
 description = 'Core protobuf mapping APIs'
 
 dependencies {
-    api project(':pipestream-proto-tools-helpers')
+    api project(':proteus-helpers')
 
     testImplementation platform(libs.junit.bom)
     testImplementation libs.junit.jupiter

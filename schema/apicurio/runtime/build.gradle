@@ -5,14 +5,14 @@ plugins {
 description = 'Apicurio Registry descriptor loader - Quarkus runtime'
 
 quarkusExtension {
-    deploymentModule = 'pipestream-proto-tools-schema-apicurio-deployment'
+    deploymentModule = 'proteus-schema-apicurio-deployment'
 }
 
 dependencies {
     implementation platform(libs.quarkus.bom)
 
-    api project(':pipestream-proto-tools-descriptors')
-    api project(':pipestream-proto-tools-helpers')
+    api project(':proteus-descriptors')
+    api project(':proteus-helpers')
     api libs.apicurio.registry.java.sdk
     implementation libs.apicurio.registry.protobuf.serde
     implementation libs.quarkus.arc

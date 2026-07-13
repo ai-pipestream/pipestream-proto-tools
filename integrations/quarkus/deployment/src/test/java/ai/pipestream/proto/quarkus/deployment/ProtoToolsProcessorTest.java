@@ -14,7 +14,7 @@ class ProtoToolsProcessorTest {
     void registersFeatureAndReflection() {
         ProtoToolsProcessor processor = new ProtoToolsProcessor();
         FeatureBuildItem feature = processor.feature();
-        assertThat(feature.getName()).isEqualTo("pipestream-proto-tools");
+        assertThat(feature.getName()).isEqualTo("proteus");
 
         ReflectiveClassBuildItem reflective = processor.registerProducerForReflection();
         assertThat(reflective.getClassNames()).contains(ProtoToolsProducer.class.getName());

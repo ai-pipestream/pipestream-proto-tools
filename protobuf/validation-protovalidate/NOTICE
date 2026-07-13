@@ -1,4 +1,4 @@
-pipestream-proto-tools-protobuf-validation-protovalidate
+proteus-protobuf-validation-protovalidate
 ========================================================
 
 This module implements support for the protovalidate validation standard,
@@ -27,7 +27,7 @@ express, are defined by the upstream project.
 
 Original code
 -------------
-All other code in this module is original to pipestream-proto-tools, written
+All other code in this module is original to proteus, written
 from the protovalidate specification and its conformance suite (not derived
 from the upstream implementation source), and licensed under the repository's
 MIT license.

@@ -1,7 +1,7 @@
 description = 'Vert.x 5 host for protobuf JSON/REST'
 
 dependencies {
-    api project(':pipestream-proto-tools-server-common')
+    api project(':proteus-server-common')
     api libs.vertx.core
     api libs.vertx.web
 

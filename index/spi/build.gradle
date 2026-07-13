@@ -5,7 +5,7 @@ plugins {
 description = 'Search-index SPI, indexing plans, and descriptor indexing hints'
 
 dependencies {
-    api project(':pipestream-proto-tools-mapper-core')
+    api project(':proteus-mapper-core')
     api libs.protobuf.java
     api libs.slf4j.api
 }

@@ -1,6 +1,6 @@
 description = 'OpenSearch document mapper plugin (ServiceLoader)'
 
 dependencies {
-    api project(':pipestream-proto-tools-index-spi')
-    api project(':pipestream-proto-tools-mapper-core')
+    api project(':proteus-index-spi')
+    api project(':proteus-mapper-core')
 }

@@ -21,7 +21,7 @@ import java.util.Objects;
 /**
  * OpenSearch-oriented document map builder.
  * Uses a shared {@link IndexingPlan} (descriptor hints); does not emit NDJSON —
- * pair with {@code pipestream-proto-tools-index-ndjson} when you need bulk lines.
+ * pair with {@code proteus-index-ndjson} when you need bulk lines.
  */
 public final class OpenSearchDocumentMapper implements SearchEngineIndexer {
     public static final String ENGINE_ID = "opensearch";

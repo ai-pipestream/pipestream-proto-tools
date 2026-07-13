@@ -1,7 +1,7 @@
 description = 'Confluent schema registry integration'
 
 dependencies {
-    api project(':pipestream-proto-tools-descriptors')
+    api project(':proteus-descriptors')
 
     // Confluent Schema Registry subjects API support: JSON responses + .proto text parsing.
     implementation libs.jackson.databind

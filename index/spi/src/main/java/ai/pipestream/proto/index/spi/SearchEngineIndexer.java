@@ -5,7 +5,7 @@ import com.google.protobuf.Message;
 /**
  * ServiceLoader SPI: one implementation per search engine.
  *
- * <p>NDJSON is not an engine — use {@code pipestream-proto-tools-index-ndjson}.
+ * <p>NDJSON is not an engine — use {@code proteus-index-ndjson}.
  * Engines consume an {@link IndexingPlan} built from descriptor indexing hints.
  */
 public interface SearchEngineIndexer {

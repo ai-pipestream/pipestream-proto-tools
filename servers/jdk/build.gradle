@@ -1,5 +1,5 @@
 description = 'JDK HttpServer host for protobuf JSON/REST'
 
 dependencies {
-    api project(':pipestream-proto-tools-server-common')
+    api project(':proteus-server-common')
 }

@@ -2,6 +2,6 @@ description = 'Quarkus build-time integration for Pipestream protobuf tools'
 
 dependencies {
     implementation platform(libs.quarkus.bom)
-    implementation project(':pipestream-proto-tools-quarkus')
+    implementation project(':proteus-quarkus')
     implementation libs.quarkus.arc.deployment
 }

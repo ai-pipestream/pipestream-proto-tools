@@ -21,7 +21,7 @@ import java.util.Map;
  *
  * <pre>{@code
  * protovalidate-conformance --expected_failures=<file> \
- *     java -jar pipestream-proto-tools-protobuf-validation-conformance-all.jar
+ *     java -jar proteus-protobuf-validation-conformance-all.jar
  * }</pre>
  *
  * <p>The request is parsed with a registry that knows the {@code buf.validate} option extensions, so

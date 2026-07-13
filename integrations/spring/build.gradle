@@ -1,8 +1,8 @@
 description = 'Spring integration for Pipestream protobuf tools'
 
 dependencies {
-    api project(':pipestream-proto-tools-mapper-cel')
-    api project(':pipestream-proto-tools-rest')
+    api project(':proteus-mapper-cel')
+    api project(':proteus-rest')
     compileOnly libs.spring.context
 
     testImplementation libs.spring.context

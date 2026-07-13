@@ -5,7 +5,7 @@ plugins {
 description = 'JSON Schema (draft 2020-12) generation from protobuf descriptors and validation constraints'
 
 dependencies {
-    api project(':pipestream-proto-tools-protobuf-validation')
+    api project(':proteus-protobuf-validation')
     implementation libs.jackson.databind
 
     testImplementation libs.protobuf.java.util

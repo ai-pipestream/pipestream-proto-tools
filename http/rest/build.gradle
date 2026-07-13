@@ -1,6 +1,6 @@
 description = 'REST/JSON gateway over protobuf services (framework-agnostic)'
 
 dependencies {
-    api project(':pipestream-proto-tools-json')
+    api project(':proteus-json')
     api libs.slf4j.api
 }

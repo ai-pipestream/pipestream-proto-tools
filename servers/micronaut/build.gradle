@@ -1,7 +1,7 @@
 description = 'Micronaut host adapter for protobuf JSON/REST'
 
 dependencies {
-    api project(':pipestream-proto-tools-server-common')
+    api project(':proteus-server-common')
     // Controllers stay in the consuming Micronaut app; this module is the shared facade.
     compileOnly libs.micronaut.inject
 }

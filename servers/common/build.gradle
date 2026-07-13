@@ -1,8 +1,8 @@
 description = 'Shared config and helpers for protobuf JSON/REST server hosts'
 
 dependencies {
-    api project(':pipestream-proto-tools-rest')
-    api project(':pipestream-proto-tools-openapi')
+    api project(':proteus-rest')
+    api project(':proteus-openapi')
     api libs.slf4j.api
     // Structured (non-proto) JSON envelopes go through Jackson rather than a hand-rolled escaper.
     implementation libs.jackson.databind
