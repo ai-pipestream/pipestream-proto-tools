@@ -150,6 +150,16 @@ its own lifecycle: validation says what data may enter; a shape says how data
 comes to rest in an index. The pipeline reads gather → validate → shape →
 engine.
 
+**4b. The MCP surface — first slice done.** `protomolt-mcp` serves the
+action catalog as MCP tools (the manifest is already the MCP tool shape)
+and a git-backed registry as MCP resources, over a hand-rolled JSON-RPC
+2.0 stdio transport: plain Java, Jackson, no framework. Next increments:
+a Streamable HTTP mount on the registry server, thin Spring AI / Quarkus
+MCP host adapters over the same catalog, a `grpc-invoke` verb (dynamic
+calls against live gRPC services from registry descriptors), and
+`generate-stubs` via protoc-as-WASM, turning build-time codegen into a
+live registry operation.
+
 **5. A web console.** Every server host already serves `openapi.json`, and
 `MappingHelper` exists specifically to feed schema-browsing UIs. A bundled,
 build-free console — schema browser, subject/version history, a try-it

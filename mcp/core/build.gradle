@@ -1,0 +1,14 @@
+plugins {
+    id 'application'
+}
+
+description = 'MCP server over the action catalog and registry: JSON-RPC 2.0 on stdio, no framework'
+
+dependencies {
+    api project(':protomolt-actions')
+    api project(':protomolt-registry')
+}
+
+application {
+    mainClass = 'ai.pipestream.proto.mcp.McpMain'
+}

@@ -25,6 +25,7 @@ prefix; Java packages use the `ai.pipestream.proto.*` namespace (see
 | `compat/` | `compat` | Breaking-change detection: typed schema diffs and backward/forward/full compatibility policies |
 | `registry/` | `registry`, `registry-server` | Git-backed schema registry: subject/version store with compatibility-gated writes, served over the Confluent protocol |
 | `actions/` | `actions` | Self-describing verb catalog (compile, validate, diff, check-compat, render, evaluate) for consoles and LLM tooling |
+| `mcp/` | `mcp` | Model Context Protocol server over the action catalog and registry: plain-Java stdio, no framework |
 | `mapper/` | `mapper-core`, `mapper-cel`, `metadata` | Text mapping rules, CEL filters and selectors, CEL-driven metadata extraction |
 | `protobuf/` | `protobuf-metadata`, `protobuf-validation`, `protobuf-validation-protovalidate`, `protobuf-validation-conformance`, `protobuf-indexing` | Descriptor-option standards for metadata, validation, and indexing; protovalidate dialect and conformance harness |
 | `schema/` | `schema-apicurio`, `schema-confluent` | Descriptor loaders and schema publishers for Apicurio Registry and Confluent-compatible schema registries |
@@ -110,6 +111,8 @@ Each of these is covered in depth in the documentation below.
   Confluent protocol, with compatibility-gated writes
 - [Actions](docs/actions.md) — the verb catalog for consoles and LLM
   tooling
+- [MCP server](docs/mcp.md) — the catalog and registry over the Model
+  Context Protocol for AI agents
 - [Field mapping](docs/mapping.md) — text rule syntax, CEL filters and
   selectors
 - [Validation](docs/validation.md) — the rule surface, dialect SPI,

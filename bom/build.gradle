@@ -22,6 +22,7 @@ dependencies {
         api project(':protomolt-compat')
         api project(':protomolt-actions')
         api project(':protomolt-registry')
+        api project(':protomolt-mcp')
         api project(':protomolt-registry-server')
         api project(':protomolt-jsonschema')
         api project(':protomolt-protobuf-validation-protovalidate')
