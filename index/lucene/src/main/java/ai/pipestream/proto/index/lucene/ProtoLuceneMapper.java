@@ -308,11 +308,10 @@ public final class ProtoLuceneMapper implements SearchEngineIndexer {
                 if (stored) {
                     document.add(new StoredField(name, v));
                 }
-                if (hint.sortable()) {
-                    document.add(new FloatDocValuesField(name, v));
-                }
                 if (hint.facetable()) {
                     document.add(new SortedNumericDocValuesField(name, NumericUtils.floatToSortableInt(v)));
+                } else if (hint.sortable()) {
+                    document.add(new FloatDocValuesField(name, v));
                 }
             }
             case DOUBLE -> {
@@ -323,11 +322,10 @@ public final class ProtoLuceneMapper implements SearchEngineIndexer {
                 if (stored) {
                     document.add(new StoredField(name, v));
                 }
-                if (hint.sortable()) {
-                    document.add(new DoubleDocValuesField(name, v));
-                }
                 if (hint.facetable()) {
                     document.add(new SortedNumericDocValuesField(name, NumericUtils.doubleToSortableLong(v)));
+                } else if (hint.sortable()) {
+                    document.add(new DoubleDocValuesField(name, v));
                 }
             }
             case BINARY -> throw new MappingException(
@@ -345,25 +343,29 @@ public final class ProtoLuceneMapper implements SearchEngineIndexer {
         }
     }
 
-    /** Sortable → {@code SortedDocValuesField}; facetable → {@code SortedSetDocValuesField}. */
+    /**
+     * Sortable → {@code SortedDocValuesField}; facetable → {@code SortedSetDocValuesField}.
+     * Lucene allows one doc-values type per field, so when both are hinted the multi-valued
+     * form wins — it serves faceting directly and sorting via {@code SortedSetSortField}.
+     */
     private static void addStringDocValues(
             Document document, String name, ResolvedFieldHint hint, String value) {
-        if (hint.sortable()) {
-            document.add(new SortedDocValuesField(name, new BytesRef(value)));
-        }
         if (hint.facetable()) {
             document.add(new SortedSetDocValuesField(name, new BytesRef(value)));
+        } else if (hint.sortable()) {
+            document.add(new SortedDocValuesField(name, new BytesRef(value)));
         }
     }
 
     /** Sortable → {@code NumericDocValuesField}; facetable → {@code SortedNumericDocValuesField}. */
     private static void addLongDocValues(
             Document document, String name, ResolvedFieldHint hint, long value) {
-        if (hint.sortable()) {
-            document.add(new NumericDocValuesField(name, value));
-        }
+        // One doc-values type per field: when both are hinted the multi-valued form wins
+        // (sorting still works via SortedNumericSortField).
         if (hint.facetable()) {
             document.add(new SortedNumericDocValuesField(name, value));
+        } else if (hint.sortable()) {
+            document.add(new NumericDocValuesField(name, value));
         }
     }
 

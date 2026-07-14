@@ -4,4 +4,6 @@ dependencies {
     api project(':protomolt-index-spi')
     api project(':protomolt-mapper-core')
     api libs.lucene.core
+
+    testImplementation libs.lucene.analysis.common
 }

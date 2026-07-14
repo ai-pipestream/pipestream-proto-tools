@@ -472,7 +472,9 @@ class ProtoLuceneMapperTest {
                 .map(field -> field.fieldType().docValuesType())
                 .filter(type -> type != DocValuesType.NONE)
                 .toList();
-        assertThat(docValues).containsExactlyInAnyOrder(DocValuesType.SORTED, DocValuesType.SORTED_SET);
+        // Lucene allows one doc-values type per field; the multi-valued form serves both
+        // faceting and sorting (SortedSetSortField), so it wins when both are hinted.
+        assertThat(docValues).containsExactly(DocValuesType.SORTED_SET);
     }
 
     @Test
@@ -494,7 +496,9 @@ class ProtoLuceneMapperTest {
                 .map(field -> field.fieldType().docValuesType())
                 .filter(type -> type != DocValuesType.NONE)
                 .toList();
-        assertThat(docValues).containsExactlyInAnyOrder(DocValuesType.NUMERIC, DocValuesType.SORTED_NUMERIC);
+        // One doc-values type per field: SORTED_NUMERIC serves faceting and sorting
+        // (SortedNumericSortField) alike.
+        assertThat(docValues).containsExactly(DocValuesType.SORTED_NUMERIC);
     }
 
     @Test
