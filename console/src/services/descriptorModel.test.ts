@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { descriptorToJsonSchema } from '@ai-pipestream/protobuf-forms/descriptor'
+import { descriptorToJsonSchema } from '@/lib/forms/descriptor'
 import { buildDescriptorModel } from './descriptorModel'
 import { personDescriptorSetBytes } from './descriptorFixture'
 

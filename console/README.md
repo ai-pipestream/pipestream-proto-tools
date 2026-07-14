@@ -4,28 +4,27 @@ The schema-registry console: a Vue 3 / Vuetify application for browsing
 subjects and versions, exploring types, diffing versions, checking
 compatibility, and trying the verbs — ProtoMolt's own frontend.
 
-## Status: recovered source, not yet wired to a build
+## Running it
 
-This code was originally written inside the platform frontend's working tree
-by mistake (it was never committed there); the sole copy was snapshotted and
-has now been landed here, in the project it belongs to. What's present:
+```shell
+npm install
+npm run dev          # against protomolt-serve's registry on localhost:8081
+PROTOMOLT_REGISTRY_URL=http://host:port npm run dev   # any Confluent-compatible registry
+npm test             # 66 tests, vitest (jsdom for component suites)
+npm run build        # static bundle in dist/
+```
 
-- `src/` — the application: views (`SubjectsView`, `SubjectDetailView`),
-  components (type explorer, version diff, compat check, try-it panel, proto
-  source with highlighting), services (`api`, `descriptorModel`,
-  `compatCheck`, `protoHighlight`, `textDiff`, `routes`), and their tests
-  (vitest + jsdom, via `componentTestKit.ts`).
-- `schemaRegistryProxy.ts` (+ test) — the reverse proxy the platform BFF used
-  for `/api/protomolt/*`. Standalone, the console should instead target
-  `protomolt-serve`'s registry and REST ports directly (or this proxy can
-  become a slim dev server).
-- `descriptor.ts` — the descriptor-parsing entry that lived in the platform's
-  `protobuf-forms` package.
-- `platform-integration.patch` — the full diff of how it was mounted in the
-  platform monorepo (router entry, BFF registration, package deps), kept for
-  reference while extracting.
+The dev server proxies `/api/protomolt/*` to the registry, so the app is
+same-origin in development; a production deployment serves `dist/` behind
+any reverse proxy that does the same.
 
-To make it a standalone app it still needs: a `package.json` + vite/vitest
-scaffold (the platform's hosted these), dependency selection (the patch
-records what it used), and an API base pointing at a running
-`protomolt-serve` instead of the platform BFF.
+## Provenance
+
+The application source (views, components, services, tests) was originally
+written inside the platform frontend's working tree by mistake and recovered
+from the snapshot taken before that tree was reset; this scaffold makes it a
+standalone app. `reference/platform-integration.patch` records how it was
+once mounted in the platform, and `reference/schemaRegistryProxy.ts` is the
+BFF proxy the vite dev proxy replaces. The schema-form and descriptor
+utilities under `src/lib/` are vendored from the platform packages they came
+from.

@@ -98,8 +98,8 @@
 import { computed, ref, watch } from 'vue'
 import { fromJson, toJson } from '@bufbuild/protobuf'
 import type { JsonValue } from '@bufbuild/protobuf'
-import { SchemaForm } from '@ai-pipestream/shared-components'
-import { descriptorToJsonSchema } from '@ai-pipestream/protobuf-forms/descriptor'
+import { SchemaForm } from '@/lib/schema-form'
+import { descriptorToJsonSchema } from '@/lib/forms/descriptor'
 import { toast } from '@/composables/useToast'
 import type { DescriptorModel } from '../services/descriptorModel'
 
