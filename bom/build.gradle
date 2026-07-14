@@ -14,6 +14,10 @@ dependencies {
     constraints {
         api project(':protomolt-descriptors')
         api project(':protomolt-helpers')
+        api project(':protomolt-formats')
+        api project(':protomolt-proto-sources')
+        api project(':protomolt-jsonschema')
+        api project(':protomolt-protobuf-validation-protovalidate')
         api project(':protomolt-mapper-core')
         api project(':protomolt-mapper-cel')
         api project(':protomolt-schema-apicurio')

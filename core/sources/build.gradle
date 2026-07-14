@@ -1,0 +1,8 @@
+description = 'Proto source-set model, import graph, Wire-based compilation and the schema publisher SPI'
+
+dependencies {
+    api project(':protomolt-descriptors')
+
+    // .proto text -> FileDescriptorProto compilation.
+    implementation libs.wire.schema
+}

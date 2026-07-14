@@ -23,6 +23,9 @@ project(':protomolt-descriptors').projectDir = file('core/descriptors')
 include 'protomolt-helpers'
 project(':protomolt-helpers').projectDir = file('core/helpers')
 
+include 'protomolt-proto-sources'
+project(':protomolt-proto-sources').projectDir = file('core/sources')
+
 include 'protomolt-mapper-core'
 project(':protomolt-mapper-core').projectDir = file('mapper/core')
 

@@ -1,18 +1,13 @@
 package ai.pipestream.proto.schema.confluent;
 
 import ai.pipestream.proto.descriptors.DescriptorLoader;
-import ai.pipestream.proto.descriptors.GoogleDescriptorLoader;
+import ai.pipestream.proto.sources.CompiledProtos;
+import ai.pipestream.proto.sources.ProtoSourceCompiler;
+import ai.pipestream.proto.sources.ProtoSourceSet;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
-import com.google.protobuf.DescriptorProtos.FileDescriptorSet;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
-import com.squareup.wire.schema.Location;
-import com.squareup.wire.schema.ProtoFile;
-import com.squareup.wire.schema.Schema;
-import com.squareup.wire.schema.SchemaLoader;
-import com.squareup.wire.schema.internal.SchemaEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,20 +18,15 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Stream;
 
 /**
  * Loads protobuf descriptors from a Confluent Schema Registry (or any compatible endpoint,
@@ -76,9 +66,10 @@ import java.util.stream.Stream;
  * every lookup, the compiled registry is cached for a short period
  * ({@link #LOOKUP_CACHE_TTL}); {@link #clearCache()} drops the cache immediately.</p>
  *
- * <p>Well-known {@code google/protobuf/*.proto} imports resolve without being registered as
- * references: Wire bundles {@code any, descriptor, duration, empty, struct, timestamp, wrappers}
- * and this loader supplies {@code field_mask}; the built descriptors for those files come from
+ * <p>Compilation is delegated to {@link ProtoSourceCompiler}. Well-known
+ * {@code google/protobuf/*.proto} imports resolve without being registered as references:
+ * Wire bundles {@code any, descriptor, duration, empty, struct, timestamp, wrappers}
+ * and the compiler supplies {@code field_mask}; the built descriptors for those files come from
  * protobuf-java's runtime. Like {@link ConfluentDescriptorSource}, the loader talks anonymous
  * HTTP (no auth) via {@link HttpClient}. HTTP timeouts are configurable via
  * {@link #ConfluentSchemaRegistryLoader(URI, Duration, Duration)} (defaults: 10s connect,
@@ -101,20 +92,11 @@ public final class ConfluentSchemaRegistryLoader implements DescriptorLoader, Au
     /** How long {@link #loadDescriptor(String)} reuses a previously compiled registry. */
     public static final Duration LOOKUP_CACHE_TTL = Duration.ofSeconds(30);
 
-    /** {@code field_mask.proto} is a well-known import that Wire does not bundle. */
-    private static final String FIELD_MASK_PATH = "google/protobuf/field_mask.proto";
-    private static final String FIELD_MASK_PROTO = """
-            syntax = "proto3";
-            package google.protobuf;
-            message FieldMask {
-              repeated string paths = 1;
-            }
-            """;
-
     private final URI baseUrl;
     private final HttpClient client;
     private final Duration requestTimeout;
     private final ObjectMapper json = new ObjectMapper();
+    private final ProtoSourceCompiler compiler = new ProtoSourceCompiler();
 
     private volatile CachedDescriptors lookupCache;
     private volatile int lastSkippedSubjects;
@@ -328,8 +310,13 @@ public final class ConfluentSchemaRegistryLoader implements DescriptorLoader, Au
 
         String rootPath = rootFileName(subject, files);
         files.put(rootPath, latest.path("schema").asText());
-        files.putIfAbsent(FIELD_MASK_PATH, FIELD_MASK_PROTO);
-        return compile(rootPath, files);
+
+        ProtoSourceSet.Builder sources = ProtoSourceSet.builder();
+        files.forEach((path, text) -> sources.add(path, text, "confluent:" + baseUrl + "/" + subject));
+        CompiledProtos compiled = compiler.compile(sources.build());
+        return compiled.descriptorFor(rootPath)
+                .orElseThrow(() -> new DescriptorLoadException(
+                        "Compiled schema set does not contain " + rootPath));
     }
 
     /**
@@ -409,77 +396,6 @@ public final class ConfluentSchemaRegistryLoader implements DescriptorLoader, Au
             name = "_" + name;
         }
         return name;
-    }
-
-    /**
-     * Writes the schema texts to a scratch directory, links them with Wire (which supplies the
-     * bundled {@code google/protobuf} imports), encodes every file reachable from the root into
-     * a {@code FileDescriptorSet} and builds runtime descriptors from it.
-     */
-    private FileDescriptor compile(String rootPath, Map<String, String> files) throws Exception {
-        Path dir = Files.createTempDirectory("pipestream-confluent-sr");
-        try {
-            for (Map.Entry<String, String> file : files.entrySet()) {
-                Path target = dir.resolve(file.getKey()).normalize();
-                if (!target.startsWith(dir)) {
-                    throw new DescriptorLoadException("Unsafe schema path: " + file.getKey());
-                }
-                Files.createDirectories(target.getParent());
-                Files.writeString(target, file.getValue());
-            }
-
-            SchemaLoader loader = new SchemaLoader(FileSystems.getDefault());
-            loader.setLoadExhaustively(true);
-            loader.initRoots(List.of(Location.get(dir.toString())), List.of());
-            Schema schema = loader.loadSchema();
-
-            Map<String, FileDescriptorProto> protos = new LinkedHashMap<>();
-            encodeWithDependencies(rootPath, schema, new SchemaEncoder(schema), protos);
-            FileDescriptorSet set = FileDescriptorSet.newBuilder().addAllFile(protos.values()).build();
-
-            return GoogleDescriptorLoader.fromDescriptorSet(set).stream()
-                    .filter(fd -> fd.getName().equals(rootPath))
-                    .findFirst()
-                    .orElseThrow(() -> new DescriptorLoadException(
-                            "Compiled schema set does not contain " + rootPath));
-        } finally {
-            deleteRecursively(dir);
-        }
-    }
-
-    /**
-     * Encodes {@code path} and, transitively, every import Wire has a linked file for. Imports
-     * Wire cannot supply (e.g. well-known types resolved from protobuf-java's runtime) are left
-     * to {@link GoogleDescriptorLoader}'s well-known-type fallback.
-     */
-    private void encodeWithDependencies(String path, Schema schema, SchemaEncoder encoder,
-                                        Map<String, FileDescriptorProto> out) throws IOException {
-        if (out.containsKey(path)) {
-            return;
-        }
-        ProtoFile protoFile = schema.protoFile(path);
-        if (protoFile == null) {
-            return;
-        }
-        FileDescriptorProto proto = FileDescriptorProto.parseFrom(encoder.encode(protoFile).toByteArray());
-        out.put(path, proto);
-        for (String dependency : proto.getDependencyList()) {
-            encodeWithDependencies(dependency, schema, encoder, out);
-        }
-    }
-
-    private static void deleteRecursively(Path dir) {
-        try (Stream<Path> paths = Files.walk(dir)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
-                try {
-                    Files.deleteIfExists(path);
-                } catch (IOException e) {
-                    LOG.debug("Failed to delete {}", path, e);
-                }
-            });
-        } catch (IOException e) {
-            LOG.debug("Failed to clean up {}", dir, e);
-        }
     }
 
     private static boolean containsMessage(List<Descriptor> messages, String name, boolean fullyQualified) {
