@@ -1,0 +1,32 @@
+# Publishes the current SNAPSHOT of every module to Maven Central's snapshot
+# repository. Manual only: Central snapshot storage is quota-constrained, so
+# snapshots are published deliberately, not on every merge. Snapshots upload
+# unsigned (Central accepts it; signing is guarded on GPG_* presence).
+name: Publish Snapshot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Publish snapshot to Maven Central snapshots
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: ./gradlew publishAggregationToCentralPortalSnapshots --no-daemon --console=plain
+
+      - name: Print resolved snapshot version
+        run: ./gradlew currentVersion --no-daemon --console=plain -q
