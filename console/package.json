@@ -1,0 +1,35 @@
+{
+  "name": "protomolt-console",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The ProtoMolt schema-registry console: browse subjects and versions, explore types, diff schemas, check compatibility, and try messages against declared rules.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.9.0",
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
+    "@mdi/font": "^7.4.47",
+    "vue": "^3.5.24",
+    "vue-router": "^4.6.4",
+    "vuetify": "^3.11.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@vitejs/plugin-vue": "^6.0.4",
+    "@vue/test-utils": "^2.4.11",
+    "@vue/tsconfig": "^0.9.1",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.4",
+    "vitest": "^3.2.4",
+    "vue-tsc": "^3.2.1"
+  }
+}

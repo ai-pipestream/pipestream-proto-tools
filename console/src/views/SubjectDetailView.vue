@@ -210,7 +210,12 @@ const envelopeError = ref('')
 const effectiveMode = ref<CompatibilityMode | null>(null)
 const modeInherited = ref(true)
 
-const tab = ref('schema')
+// The active tab lives in the URL (?tab=) so views are deep-linkable.
+const TABS = ['schema', 'diff', 'types', 'try', 'compat']
+const tab = ref(TABS.includes(String(route.query.tab)) ? String(route.query.tab) : 'schema')
+watch(tab, (t) => {
+  router.replace({ query: { ...route.query, tab: t === 'schema' ? undefined : t } })
+})
 
 const descriptorModel = ref<DescriptorModel | null>(null)
 const descriptorLoading = ref(false)

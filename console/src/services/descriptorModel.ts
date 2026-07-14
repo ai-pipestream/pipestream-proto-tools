@@ -16,7 +16,20 @@ import {
   type DescService,
   type FileRegistry,
 } from '@bufbuild/protobuf'
-import { FileDescriptorSetSchema } from '@bufbuild/protobuf/wkt'
+import {
+  FileDescriptorSetSchema,
+  file_google_protobuf_any,
+  file_google_protobuf_api,
+  file_google_protobuf_descriptor,
+  file_google_protobuf_duration,
+  file_google_protobuf_empty,
+  file_google_protobuf_field_mask,
+  file_google_protobuf_source_context,
+  file_google_protobuf_struct,
+  file_google_protobuf_timestamp,
+  file_google_protobuf_type,
+  file_google_protobuf_wrappers,
+} from '@bufbuild/protobuf/wkt'
 
 export interface FieldRow {
   name: string
@@ -71,17 +84,73 @@ export interface DescriptorModel {
   registry: FileRegistry
 }
 
-/** Parse the registry's binary descriptor-set response. */
+// The registry serves the subject's own files; well-known imports
+// (descriptor.proto for option schemas, timestamp, ...) are implicit in the
+// protocol, so any the set omits are filled in from the runtime's bundled
+// copies before linking.
+// Dependency order matters: files link in sequence, so api.proto's imports
+// (source_context, type) come before it.
+const wellKnownProtos = [
+  file_google_protobuf_descriptor,
+  file_google_protobuf_any,
+  file_google_protobuf_source_context,
+  file_google_protobuf_type,
+  file_google_protobuf_api,
+  file_google_protobuf_duration,
+  file_google_protobuf_empty,
+  file_google_protobuf_field_mask,
+  file_google_protobuf_struct,
+  file_google_protobuf_timestamp,
+  file_google_protobuf_wrappers,
+].map((file) => file.proto)
+
+/**
+ * Parse the registry's binary descriptor-set response. Files link strictly
+ * dependencies-first, so the set is topologically ordered here (registries
+ * are not required to emit it that way), with any missing well-known
+ * imports filled in from the runtime's bundled copies.
+ */
 export function registryFromDescriptorSet(bytes: Uint8Array): FileRegistry {
-  return createFileRegistry(fromBinary(FileDescriptorSetSchema, bytes))
+  const set = fromBinary(FileDescriptorSetSchema, bytes)
+  const byName = new Map(wellKnownProtos.map((p) => [p.name ?? '', p]))
+  for (const file of set.file) {
+    byName.set(file.name ?? '', file)
+  }
+  const ordered: (typeof set.file)[number][] = []
+  const visited = new Set<string>()
+  const visit = (name: string) => {
+    if (visited.has(name)) {
+      return
+    }
+    visited.add(name)
+    const proto = byName.get(name)
+    if (!proto) {
+      return // createFileRegistry reports the missing import precisely
+    }
+    for (const dep of proto.dependency) {
+      visit(dep)
+    }
+    ordered.push(proto)
+  }
+  for (const file of set.file) {
+    visit(file.name ?? '')
+  }
+  set.file = ordered
+  return createFileRegistry(set)
 }
 
 export function buildDescriptorModel(bytes: Uint8Array): DescriptorModel {
+  // The set's own files drive the tree; well-known fill-ins only back the
+  // linker and stay out of the display model.
+  const ownFiles = new Set(fromBinary(FileDescriptorSetSchema, bytes).file.map((f) => f.name))
   const registry = registryFromDescriptorSet(bytes)
   const files: FileNode[] = []
   const messageTypeNames: string[] = []
 
   for (const file of registry.files) {
+    if (!ownFiles.has(file.proto.name ?? file.name)) {
+      continue
+    }
     files.push(fileNode(file, messageTypeNames))
   }
   // Subject's own file(s) last in the set? Keep deterministic: alphabetical.
