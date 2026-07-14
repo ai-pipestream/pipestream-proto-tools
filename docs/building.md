@@ -83,10 +83,20 @@ overridden with system properties or environment variables:
 
 Beyond the in-build gate, the conformance executor can be scored by buf's
 `protovalidate-conformance` binary; see
-[Validation](validation.md#conformance-harness).
+[Validation](validation.md#conformance-harness). CI runs this full-suite
+scoring on every push, so the pass rate is enforced, not just documented.
 
 ## Continuous integration
 
-GitHub Actions (`.github/workflows/ci.yml`) builds and tests on every push
-to `main` and on pull requests, runs `buf lint`, and runs `buf breaking`
-against the target branch for pull requests.
+GitHub Actions (`.github/workflows/ci.yml`) runs three jobs on every push
+to `main` and on pull requests:
+
+- **build** — compiles all modules, runs the unit test suite and the
+  in-build conformance gate, runs `buf lint`, and (for pull requests)
+  `buf breaking` against the target branch.
+- **conformance** — builds the conformance executor and scores it with
+  buf's own `protovalidate-conformance` binary against the complete suite;
+  any failing case fails the job.
+- **integration** — starts `docker-compose.integration.yml` (Apicurio, and
+  a Confluent Schema Registry backed by Redpanda) and runs the
+  live-registry integration suites, failing if any suite skips.

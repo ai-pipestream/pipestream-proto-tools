@@ -117,7 +117,8 @@ schemas loaded from a registry or reflection are enforced rather than
 silently passed.
 
 Compatibility is measured rather than claimed: the implementation passes
-the complete protovalidate v1.2.2 conformance suite, 2872 of 2872 cases.
+the complete protovalidate v1.2.2 conformance suite, 2872 of 2872 cases,
+and CI re-scores the full suite with buf's own runner on every push.
 
 ## Conformance harness
 

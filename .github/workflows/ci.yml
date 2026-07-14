@@ -33,3 +33,69 @@ jobs:
       - name: Buf breaking (PRs)
         if: github.event_name == 'pull_request'
         run: buf breaking --against ".git#branch=origin/${{ github.base_ref }}"
+
+  # Scores the validation executor against buf's own protovalidate-conformance
+  # binary, so the documented full-suite pass rate is enforced on every push,
+  # not just measured once.
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install protovalidate-conformance
+        run: go install github.com/bufbuild/protovalidate/tools/protovalidate-conformance@v1.2.2
+
+      - name: Build the conformance executor
+        run: ./gradlew :protomolt-protobuf-validation-conformance:installDist --console=plain
+
+      - name: Run the full conformance suite
+        run: |
+          protovalidate-conformance \
+            protobuf/validation-conformance/build/install/protomolt-protobuf-validation-conformance/bin/protomolt-protobuf-validation-conformance
+
+  # Runs the live-registry integration suites (Apicurio native v3, Apicurio
+  # ccompat, and a genuine Confluent Schema Registry backed by Redpanda) that
+  # a plain build skips when no registry is reachable.
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Start registries
+        run: docker compose -f docker-compose.integration.yml up -d --wait
+
+      - name: Run integration tests
+        run: >
+          ./gradlew :protomolt-schema-apicurio:test :protomolt-schema-confluent:test
+          --rerun-tasks --console=plain
+
+      - name: Fail if any integration suite skipped
+        run: |
+          skipped=$(grep -h -o 'skipped="[0-9]*"' \
+            schema/apicurio/runtime/build/test-results/test/TEST-*Integration*.xml \
+            schema/confluent/build/test-results/test/TEST-*Integration*.xml \
+            | grep -o '[0-9]*' | paste -sd+ | bc)
+          echo "skipped integration tests: $skipped"
+          test "$skipped" -eq 0
+
+      - name: Registry logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.integration.yml logs
