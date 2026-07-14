@@ -70,7 +70,16 @@ public final class StoredSchemaSources {
     }
 
     private static String rootFileName(String subject, Map<String, String> files) {
-        String name = subject.replaceAll("[^A-Za-z0-9._-]", "_");
+        // Subjects that are import paths (the register-by-path convention) keep their true
+        // path, so the served descriptor set carries importable file names; anything else
+        // sanitizes to a flat name.
+        String name = subject.replaceAll("[^A-Za-z0-9._/-]", "_");
+        while (name.startsWith("/")) {
+            name = name.substring(1);
+        }
+        if (name.isBlank() || name.contains("..") || name.endsWith("/")) {
+            name = subject.replaceAll("[^A-Za-z0-9._-]", "_");
+        }
         if (!name.endsWith(".proto")) {
             name += ".proto";
         }

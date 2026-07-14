@@ -349,11 +349,21 @@ class SchemaRegistryServerHttpTest {
 
         FileDescriptorSet set = FileDescriptorSet.parseFrom(response.body());
         List<String> files = set.getFileList().stream().map(FileDescriptorProto::getName).toList();
-        assertThat(files).contains("common_v1_user.proto", CORE_SUBJECT);
+        // Path-like subjects keep their true import paths in the served set.
+        assertThat(files).contains(USER_SUBJECT, CORE_SUBJECT);
         FileDescriptorProto user = set.getFileList().stream()
-                .filter(file -> file.getName().equals("common_v1_user.proto"))
+                .filter(file -> file.getName().equals(USER_SUBJECT))
                 .findFirst().orElseThrow();
         assertThat(user.getMessageTypeList().getFirst().getName()).isEqualTo("User");
+
+        // Dependencies before dependents: consumers link the set in one forward pass.
+        for (int i = 0; i < set.getFileCount(); i++) {
+            for (String dependency : set.getFile(i).getDependencyList()) {
+                assertThat(files.indexOf(dependency))
+                        .as("dependency %s of %s appears earlier", dependency, files.get(i))
+                        .isLessThan(i);
+            }
+        }
     }
 
     @Test

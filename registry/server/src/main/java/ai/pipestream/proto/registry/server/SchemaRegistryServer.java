@@ -407,7 +407,38 @@ public final class SchemaRegistryServer implements AutoCloseable {
                     + ": " + e.getMessage());
             return;
         }
-        writeBytes(exchange, 200, PROTOBUF_CONTENT_TYPE, compiled.descriptorSet().toByteArray());
+        writeBytes(exchange, 200, PROTOBUF_CONTENT_TYPE,
+                topologicallyOrdered(compiled.descriptorSet()).toByteArray());
+    }
+
+    /**
+     * Dependencies before dependents, so consumers can link the set in one forward pass
+     * (bufbuild, protoc, and most descriptor tooling expect this).
+     */
+    static com.google.protobuf.DescriptorProtos.FileDescriptorSet topologicallyOrdered(
+            com.google.protobuf.DescriptorProtos.FileDescriptorSet set) {
+        java.util.Map<String, com.google.protobuf.DescriptorProtos.FileDescriptorProto> byName =
+                new java.util.LinkedHashMap<>();
+        set.getFileList().forEach(file -> byName.put(file.getName(), file));
+        java.util.LinkedHashSet<String> ordered = new java.util.LinkedHashSet<>();
+        byName.keySet().forEach(name -> visitFile(name, byName, ordered, new java.util.HashSet<>()));
+        com.google.protobuf.DescriptorProtos.FileDescriptorSet.Builder out =
+                com.google.protobuf.DescriptorProtos.FileDescriptorSet.newBuilder();
+        ordered.forEach(name -> out.addFile(byName.get(name)));
+        return out.build();
+    }
+
+    private static void visitFile(String name,
+                                  java.util.Map<String, com.google.protobuf.DescriptorProtos.FileDescriptorProto> byName,
+                                  java.util.LinkedHashSet<String> ordered,
+                                  java.util.Set<String> visiting) {
+        if (ordered.contains(name) || !byName.containsKey(name) || !visiting.add(name)) {
+            return;
+        }
+        for (String dependency : byName.get(name).getDependencyList()) {
+            visitFile(dependency, byName, ordered, visiting);
+        }
+        ordered.add(name);
     }
 
     // ---------------------------------------------------------------- protocol JSON
