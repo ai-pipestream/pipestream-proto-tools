@@ -125,8 +125,11 @@ native endpoint serving compiled `FileDescriptorSet`s — the gRPC
 differentiator. The acceptance test is the dogfood: our own publisher and
 loader round-trip through it. See [The registry](registry.md). Still open
 in this milestone: authentication, federation (mirroring subjects out to
-Apicurio/Confluent through the publishers), branch-per-scope workflows, and
-Maven-repository artifact publication.
+Apicurio/Confluent through the publishers), branch-per-scope workflows,
+Maven-repository artifact publication, and — keeping JSON strictly an edge
+dialect — a binary registration endpoint (upload a `FileDescriptorSet`
+natively) plus protobuf envelopes for the action catalog so gRPC clients
+drive the verbs without JSON.
 
 **4a. An indexing shape language.** Per-field hints cover the common case,
 but two problems are structurally beyond field annotations: one-to-many

@@ -38,6 +38,9 @@ project(':protomolt-gather-maven').projectDir = file('gather/maven')
 include 'protomolt-compat'
 project(':protomolt-compat').projectDir = file('compat')
 
+include 'protomolt-actions'
+project(':protomolt-actions').projectDir = file('actions')
+
 include 'protomolt-registry'
 project(':protomolt-registry').projectDir = file('registry/core')
 

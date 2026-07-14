@@ -12,6 +12,7 @@ build-from-clone quick start. The guides here cover each subsystem in depth.
 | [Publishing schemas](publishing.md) | The `SchemaPublisher` SPI; Apicurio and Confluent publishers; naming, idempotency, dry runs |
 | [Compatibility checking](compatibility.md) | Typed schema diffs; backward/forward/full/transitive policy evaluation; wire, JSON, and source rule layers |
 | [The registry](registry.md) | Git-backed schema storage; the Confluent-protocol server; compatibility-gated writes; descriptor-set serving |
+| [Actions](actions.md) | The verb catalog — compile, validate, diff, check, render, evaluate — self-describing for consoles and LLM tools |
 | [Field mapping](mapping.md) | Text rule syntax; CEL filters, selectors, and environments |
 | [Validation](validation.md) | The rule surface; dialect SPI; protovalidate interoperability and conformance |
 | [Schema metadata](metadata.md) | Declared descriptor-option metadata; CEL-based runtime extraction |

@@ -24,6 +24,7 @@ prefix; Java packages use the `ai.pipestream.proto.*` namespace (see
 | `gather/` | `gather`, `gather-git`, `gather-maven` | Acquire `.proto` sources from directories, jars, Git repositories, and Maven coordinates; adapt any gatherer to a descriptor loader |
 | `compat/` | `compat` | Breaking-change detection: typed schema diffs and backward/forward/full compatibility policies |
 | `registry/` | `registry`, `registry-server` | Git-backed schema registry: subject/version store with compatibility-gated writes, served over the Confluent protocol |
+| `actions/` | `actions` | Self-describing verb catalog (compile, validate, diff, check-compat, render, evaluate) for consoles and LLM tooling |
 | `mapper/` | `mapper-core`, `mapper-cel`, `metadata` | Text mapping rules, CEL filters and selectors, CEL-driven metadata extraction |
 | `protobuf/` | `protobuf-metadata`, `protobuf-validation`, `protobuf-validation-protovalidate`, `protobuf-validation-conformance`, `protobuf-indexing` | Descriptor-option standards for metadata, validation, and indexing; protovalidate dialect and conformance harness |
 | `schema/` | `schema-apicurio`, `schema-confluent` | Descriptor loaders and schema publishers for Apicurio Registry and Confluent-compatible schema registries |
@@ -107,6 +108,8 @@ Each of these is covered in depth in the documentation below.
   detection with backward/forward/full policies
 - [The registry](docs/registry.md) — git-backed schema storage behind the
   Confluent protocol, with compatibility-gated writes
+- [Actions](docs/actions.md) — the verb catalog for consoles and LLM
+  tooling
 - [Field mapping](docs/mapping.md) — text rule syntax, CEL filters and
   selectors
 - [Validation](docs/validation.md) — the rule surface, dialect SPI,

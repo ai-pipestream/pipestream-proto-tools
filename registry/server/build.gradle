@@ -2,6 +2,7 @@ description = 'Schema registry server: Confluent subjects protocol and descripto
 
 dependencies {
     api project(':protomolt-registry')
+    api project(':protomolt-actions')
 
     implementation libs.jackson.databind
 

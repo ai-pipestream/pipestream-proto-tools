@@ -1,5 +1,7 @@
 package ai.pipestream.proto.registry.server;
 
+import ai.pipestream.proto.actions.ActionCatalog;
+import ai.pipestream.proto.actions.ActionException;
 import ai.pipestream.proto.registry.CompatibilityModes;
 import ai.pipestream.proto.registry.IncompatibleRegistrationException;
 import ai.pipestream.proto.registry.InvalidSchemaException;
@@ -65,6 +67,7 @@ public final class SchemaRegistryServer implements AutoCloseable {
 
     private final SchemaRegistryServerConfig config;
     private final SchemaRegistryStore store;
+    private final ActionCatalog actions;
     private final ObjectMapper json = new ObjectMapper();
     private final ProtoSourceCompiler compiler = new ProtoSourceCompiler();
     private final AtomicReference<HttpServer> httpServer = new AtomicReference<>();
@@ -75,8 +78,21 @@ public final class SchemaRegistryServer implements AutoCloseable {
     }
 
     public SchemaRegistryServer(SchemaRegistryServerConfig config, SchemaRegistryStore store) {
+        this(config, store, null);
+    }
+
+    /**
+     * A server that additionally mounts the given action catalog under
+     * {@code {nativePathPrefix}/actions}: {@code GET .../actions} lists the actions with their
+     * input schemas; {@code POST .../actions/{name}} executes one with a JSON body. Action
+     * failures map to the action error envelope with {@code unknown-action} as 404,
+     * {@code invalid-input} as 400 and every other action error as 422.
+     */
+    public SchemaRegistryServer(SchemaRegistryServerConfig config, SchemaRegistryStore store,
+                                ActionCatalog actions) {
         this.config = Objects.requireNonNull(config, "config");
         this.store = Objects.requireNonNull(store, "store");
+        this.actions = actions;
     }
 
     /** Starts the server and returns the bound port. */
@@ -191,6 +207,14 @@ public final class SchemaRegistryServer implements AutoCloseable {
         } else if (segments.size() == 4 && segments.get(0).equals(nativePrefix)
                 && segments.get(1).equals("subjects") && segments.get(3).equals("descriptor-set")) {
             requireMethod(exchange, method, "GET", () -> descriptorSet(exchange, segments.get(2)));
+        } else if (actions != null && segments.size() == 2 && segments.get(0).equals(nativePrefix)
+                && segments.get(1).equals("actions")) {
+            requireMethod(exchange, method, "GET",
+                    () -> writeJson(exchange, 200, actions.list()));
+        } else if (actions != null && segments.size() == 3 && segments.get(0).equals(nativePrefix)
+                && segments.get(1).equals("actions")) {
+            requireMethod(exchange, method, "POST",
+                    () -> executeAction(exchange, segments.get(2)));
         } else {
             writeError(exchange, 404, 404, "HTTP 404 Not Found");
         }
@@ -422,6 +446,26 @@ public final class SchemaRegistryServer implements AutoCloseable {
                     reference.path("version").asInt()));
         }
         return references;
+    }
+
+    // ---------------------------------------------------------------- actions mount
+
+    private void executeAction(HttpExchange exchange, String name) throws IOException {
+        JsonNode body = readJsonBody(exchange);
+        if (body == null || !body.isObject()) {
+            writeError(exchange, 400, 400, "Action input must be a JSON object");
+            return;
+        }
+        try {
+            writeJson(exchange, 200, actions.execute(name, (ObjectNode) body));
+        } catch (ActionException e) {
+            int status = switch (e.code()) {
+                case "unknown-action" -> 404;
+                case "invalid-input" -> 400;
+                default -> 422;
+            };
+            writeJson(exchange, status, e.toJson(json));
+        }
     }
 
     // ---------------------------------------------------------------- HTTP plumbing
