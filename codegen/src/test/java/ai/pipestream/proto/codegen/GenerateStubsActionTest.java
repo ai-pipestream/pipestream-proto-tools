@@ -90,11 +90,20 @@ class GenerateStubsActionTest {
     }
 
     @Test
+    void pythonGeneratorProducesPb2Module() throws Exception {
+        ObjectNode result = action.execute(input("python"), ActionContext.create());
+        assertThat(result.get("ok").asBoolean()).isTrue();
+        assertThat(names(result)).anySatisfy(name -> assertThat(name).endsWith("order_pb2.py"));
+        String content = result.get("files").get(0).get("content").asText();
+        assertThat(content).contains("DESCRIPTOR");
+    }
+
+    @Test
     void unknownGeneratorIsInvalidInput() {
-        assertThatThrownBy(() -> action.execute(input("python"), ActionContext.create()))
+        assertThatThrownBy(() -> action.execute(input("rust"), ActionContext.create()))
                 .isInstanceOfSatisfying(ActionException.class, e -> {
                     assertThat(e.code()).isEqualTo("invalid-input");
-                    assertThat(e.getMessage()).contains("java, kotlin, grpc-java");
+                    assertThat(e.getMessage()).contains("java, kotlin, grpc-java, python");
                 });
     }
 
