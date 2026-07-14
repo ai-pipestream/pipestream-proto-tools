@@ -59,6 +59,9 @@ project(':protomolt-grpc-service').projectDir = file('grpc/service')
 include 'protomolt-serve'
 project(':protomolt-serve').projectDir = file('serve')
 
+include 'protomolt-connect'
+project(':protomolt-connect').projectDir = file('kafka/connect')
+
 include 'protomolt-codegen'
 project(':protomolt-codegen').projectDir = file('codegen')
 

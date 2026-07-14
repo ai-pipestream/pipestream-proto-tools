@@ -26,6 +26,7 @@ dependencies {
         api project(':protomolt-grpc-invoke')
         api project(':protomolt-grpc-service')
         api project(':protomolt-serve')
+        api project(':protomolt-connect')
         api project(':protomolt-codegen')
         api project(':protomolt-registry-server')
         api project(':protomolt-jsonschema')
