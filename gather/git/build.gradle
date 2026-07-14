@@ -1,0 +1,7 @@
+description = 'Git proto gatherer: clone/fetch repositories and stage proto trees (JGit)'
+
+dependencies {
+    api project(':protomolt-gather')
+
+    implementation libs.jgit
+}

@@ -1,0 +1,8 @@
+description = 'Maven proto gatherer: resolve artifacts by coordinate and stage protos from their jars'
+
+dependencies {
+    api project(':protomolt-gather')
+
+    implementation libs.maven.resolver.supplier
+    implementation libs.maven.resolver.provider
+}
