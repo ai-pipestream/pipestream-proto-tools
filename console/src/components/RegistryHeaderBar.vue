@@ -36,6 +36,13 @@
       </template>
 
       <v-btn
+        prepend-icon="mdi-connection"
+        variant="tonal"
+        size="small"
+        :to="{ name: 'schema-registry-connect' }"
+      >Connect a service</v-btn>
+
+      <v-btn
         icon="mdi-refresh"
         variant="text"
         size="small"

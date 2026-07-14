@@ -7,6 +7,8 @@ import { defineConfig } from 'vitest/config'
 // protomolt-serve's Confluent-protocol port. Point PROTOMOLT_REGISTRY_URL at
 // any other Confluent-compatible registry.
 const registry = process.env.PROTOMOLT_REGISTRY_URL ?? 'http://localhost:8081'
+// protomolt-serve's REST/verbs port, for reflect/compile/gather calls.
+const serve = process.env.PROTOMOLT_SERVE_URL ?? 'http://localhost:8080'
 
 export default defineConfig({
   plugins: [vue()],
@@ -21,6 +23,11 @@ export default defineConfig({
         target: registry,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/protomolt/, ''),
+      },
+      '/api/serve': {
+        target: serve,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/serve/, ''),
       },
     },
   },

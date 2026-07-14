@@ -16,6 +16,11 @@ export const router = createRouter({
           component: () => import('./views/SubjectsView.vue'),
         },
         {
+          path: 'connect',
+          name: 'schema-registry-connect',
+          component: () => import('./views/ConnectServiceView.vue'),
+        },
+        {
           path: 'subjects/:subject(.*)',
           name: 'schema-registry-subject',
           component: () => import('./views/SubjectDetailView.vue'),

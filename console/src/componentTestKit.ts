@@ -46,6 +46,14 @@ export function vuetifyForTests() {
 export function routerForTests(): Router {
   return createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
+    routes: [
+      // Named routes components link to; targets are stubs.
+      {
+        path: '/schema-registry/connect',
+        name: 'schema-registry-connect',
+        component: { template: '<div />' },
+      },
+      { path: '/:pathMatch(.*)*', component: { template: '<div />' } },
+    ],
   })
 }
