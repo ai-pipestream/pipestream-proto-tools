@@ -81,7 +81,26 @@
                 <div class="font-weight-medium">Not a valid {{ shortTypeName }}</div>
                 <div class="text-caption">{{ composeError }}</div>
               </v-alert>
-              <pre v-if="composedJson" class="json-output">{{ composedJson }}</pre>
+              <template v-if="composedJson">
+                <div v-if="composedValue && selectedDesc" class="mb-3 d-flex ga-1">
+                  <v-btn
+                    size="x-small"
+                    :variant="resultView === 'typed' ? 'tonal' : 'outlined'"
+                    @click="resultView = 'typed'"
+                  >Typed</v-btn>
+                  <v-btn
+                    size="x-small"
+                    :variant="resultView === 'json' ? 'tonal' : 'outlined'"
+                    @click="resultView = 'json'"
+                  >JSON</v-btn>
+                </div>
+                <ProtoMessageView
+                  v-if="resultView === 'typed' && composedValue && selectedDesc"
+                  :desc="selectedDesc"
+                  :value="composedValue"
+                />
+                <pre v-else class="json-output">{{ composedJson }}</pre>
+              </template>
               <div v-else class="text-caption text-medium-emphasis">
                 Fill the form and press <em>Compose JSON</em> — the draft is validated through the
                 real message descriptor (proto3 JSON) before display.
@@ -95,10 +114,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { fromJson, toJson } from '@bufbuild/protobuf'
 import type { JsonValue } from '@bufbuild/protobuf'
 import { SchemaForm } from '@/lib/schema-form'
+import ProtoMessageView from './ProtoMessageView.vue'
 import { descriptorToJsonSchema } from '@/lib/forms/descriptor'
 import { toast } from '@/composables/useToast'
 import type { DescriptorModel } from '../services/descriptorModel'
@@ -114,6 +134,8 @@ defineEmits<{ reload: [] }>()
 const selectedType = ref<string | null>(null)
 const draft = ref<Record<string, unknown>>({})
 const composedJson = ref('')
+const composedValue = shallowRef<JsonValue | null>(null)
+const resultView = ref('typed')
 const composeError = ref('')
 
 const selectedDesc = computed(() => {
@@ -154,13 +176,12 @@ function compose() {
     // Round-trip through the real descriptor: proves the composed JSON is a
     // valid proto3-JSON message and normalizes defaults/field names.
     const message = fromJson(desc, draft.value as JsonValue, { registry: props.model.registry })
-    composedJson.value = JSON.stringify(
-      toJson(desc, message, { registry: props.model.registry }),
-      null,
-      2,
-    )
+    const canonical = toJson(desc, message, { registry: props.model.registry })
+    composedValue.value = canonical
+    composedJson.value = JSON.stringify(canonical, null, 2)
   } catch (e) {
     composeError.value = (e as Error).message ?? String(e)
+    composedValue.value = null
     composedJson.value = JSON.stringify(draft.value, null, 2)
   }
 }
@@ -168,6 +189,7 @@ function compose() {
 function reset() {
   draft.value = {}
   composedJson.value = ''
+  composedValue.value = null
   composeError.value = ''
 }
 
