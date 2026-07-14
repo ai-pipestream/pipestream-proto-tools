@@ -13,7 +13,7 @@ build-from-clone quick start. The guides here cover each subsystem in depth.
 | [Compatibility checking](compatibility.md) | Typed schema diffs; backward/forward/full/transitive policy evaluation; wire, JSON, and source rule layers |
 | [The registry](registry.md) | Git-backed schema storage; the Confluent-protocol server; compatibility-gated writes; descriptor-set serving |
 | [Actions](actions.md) | The verb catalog — compile, validate, diff, check, render, evaluate — self-describing for consoles and LLM tools |
-| [MCP server](mcp.md) | The catalog as MCP tools and the registry as MCP resources; plain-Java stdio transport |
+| [MCP server](mcp.md) | The catalog as MCP tools and the registry as MCP resources; the gRPC agent workflow (reflect, invoke, generate); plain-Java stdio transport |
 | [Field mapping](mapping.md) | Text rule syntax; CEL filters, selectors, and environments |
 | [Validation](validation.md) | The rule surface; dialect SPI; protovalidate interoperability and conformance |
 | [Schema metadata](metadata.md) | Declared descriptor-option metadata; CEL-based runtime extraction |
@@ -23,6 +23,12 @@ build-from-clone quick start. The guides here cover each subsystem in depth.
 | [Framework integrations](framework-integrations.md) | Spring Boot auto-configuration and the Quarkus extension |
 | [Core utilities](helpers.md) | `Any`/`Struct` handling, type conversion, message diff, schema hygiene |
 | [Building and testing](building.md) | Building from a clone, integration tests, linting, publishing |
+
+## Tutorials
+
+- [Operating an OpenVINO server](tutorials/openvino.md) — reflect, fall back to
+  the KServe schema, introspect models, and run a text → embedding inference,
+  all from an AI agent through the MCP server
 
 ## Project direction
 

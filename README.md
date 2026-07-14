@@ -114,7 +114,11 @@ Each of these is covered in depth in the documentation below.
 - [Actions](docs/actions.md) — the verb catalog for consoles and LLM
   tooling
 - [MCP server](docs/mcp.md) — the catalog and registry over the Model
-  Context Protocol for AI agents
+  Context Protocol for AI agents; reflect, invoke, and generate against any
+  gRPC service
+- [Operating an OpenVINO server](docs/tutorials/openvino.md) — a full
+  gRPC-agent walkthrough: reflect, register the KServe schema, introspect
+  models, run a text → embedding inference
 - [Field mapping](docs/mapping.md) — text rule syntax, CEL filters and
   selectors
 - [Validation](docs/validation.md) — the rule surface, dialect SPI,

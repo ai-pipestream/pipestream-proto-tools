@@ -1,17 +1,22 @@
 # MCP server
 
-`protomolt-mcp` exposes the [action catalog](actions.md) to AI agents over the
-Model Context Protocol. Every catalog action becomes an MCP tool with no
-translation layer: the manifest's `{name, description, inputSchema}` entries
-are already the shape MCP requires, and the input schemas are JSON Schema in
-both worlds. A schema registry can additionally be exposed as MCP resources,
-so an agent browses subjects and reads schema versions without spending tool
-calls.
+`protomolt-mcp` exposes the toolkit to AI agents over the Model Context
+Protocol. Every [action](actions.md) becomes an MCP tool with no translation
+layer — the catalog manifest's `{name, description, inputSchema}` entries are
+already the shape MCP requires, and the input schemas are JSON Schema in both
+worlds — and a schema registry is optionally served as MCP resources, so an
+agent browses subjects and reads schema versions without spending tool calls.
+
+Together with the gRPC verbs (`reflect`, `grpc-invoke`) this makes any gRPC
+service an agent-operable service: given a schema — registered, pasted, or
+reflected off the wire — an agent can introspect its types, call its methods,
+process the responses, and generate native clients for it in eight languages,
+every step machine-verified. See [The gRPC agent workflow](#the-grpc-agent-workflow).
 
 The implementation is deliberately plain Java: JSON-RPC 2.0 over stdio,
 newline-delimited, on Jackson and the JDK. No framework, no reactive runtime.
 `McpServer.handle(JsonNode)` is the pure message-in/message-out core; the
-stdio loop, tests, and future transports all drive it the same way.
+stdio loop, the tests, and any future transport drive it the same way.
 
 ## Running
 
@@ -20,23 +25,44 @@ stdio loop, tests, and future transports all drive it the same way.
 mcp/core/build/install/protomolt-mcp/bin/protomolt-mcp [--registry-git <path>]
 ```
 
-Without arguments the server exposes the ten catalog verbs as tools, plus
-`grpc-invoke` from `protomolt-grpc-invoke`: call any unary or server-streaming
-method on a live gRPC server, driven entirely by descriptors, with the request
-and responses as proto3 JSON. And `reflect`: given only a `host:port`, fetch a
-server's own schema over the gRPC server-reflection protocol and return a
-descriptor set that feeds straight into the other verbs, so a service can be
-operated with nothing registered first (servers without reflection return
-`ok: false`, so the agent knows to fall back to a registered schema). The service comes from the same schema-source
-convention every action uses, so reading a subject's resource and passing its
-text as `sources` makes any registered service callable. gRPC status failures
-return `ok: false` with the status name; only malformed input is an error. And
-`generate-stubs` from `protomolt-codegen`: protoc's Java, Kotlin, Python, C++,
-C#, Ruby, PHP, and Objective-C generators plus the grpc-java plugin, compiled to WebAssembly and run inside the JVM, so
-an agent can produce a complete, compilable gRPC client for any schema with no
-protoc installation on either side. What quarkus-grpc-zero does for a build,
-this does as a live call. With
-`--registry-git`, the git-backed registry at the path is served as resources:
+Register it with an MCP client, for example Claude Code:
+
+```shell
+claude mcp add protomolt -- \
+  /path/to/protomolt-mcp/bin/protomolt-mcp --registry-git /srv/schemas.git
+```
+
+Without `--registry-git` the server exposes the tools only. With it, the
+git-backed registry at the path is additionally served as resources.
+
+## Tools
+
+| Tool | Does |
+|---|---|
+| `compile` | Compile inline `.proto` sources; returns file names and a base64 descriptor set |
+| `list-types` | Enumerate messages, enums, and services with fields — the grounding verb |
+| `validate-message` | Validate a JSON message against the rules on its schema |
+| `diff-schemas` | Typed change list between two schemas (rule, path, impacts) |
+| `check-compat` | Compatibility verdict under a mode, with violations and change list |
+| `render-json-schema` | JSON Schema (2020-12) for a message type |
+| `render-index-mappings` | OpenSearch / Solr / Lucene field specs from indexing hints |
+| `eval-cel` | Evaluate a CEL expression against a message |
+| `map-message` | Apply text and CEL mapping rules to a message |
+| `extract-metadata` | The declared metadata bag for a type |
+| `reflect` | Discover a live gRPC server's schema from its address (server reflection) |
+| `grpc-invoke` | Call a unary or server-streaming gRPC method, no generated stubs |
+| `generate-stubs` | Generate client/message code in eight languages (protoc as WebAssembly) |
+
+Wherever a tool takes a schema it accepts exactly one of `{"type": "fully.qualified.Name"}`
+(resolved from the registry), `{"sources": {...}}` (inline `.proto`, compiled
+per call), or `{"descriptorSetBase64": ...}` (a serialized `FileDescriptorSet`).
+The `reflect` verb returns the third form, so its output is a schema input to
+every other verb.
+
+## Resources
+
+With `--registry-git`, the registry is browsable as MCP resources — reads that
+do not spend tool calls:
 
 | URI | Contents |
 |---|---|
@@ -46,12 +72,39 @@ this does as a live call. With
 
 Subject names are URL-encoded in URIs. All resource contents are JSON.
 
-Register it with an MCP client, for example Claude Code:
+## The gRPC agent workflow
 
-```shell
-claude mcp add protomolt -- \
-  /path/to/protomolt-mcp/bin/protomolt-mcp --registry-git /srv/schemas.git
-```
+The three gRPC verbs compose into a single capability: **point an agent at a
+running gRPC service and let it operate the service.** The path an agent takes:
+
+1. **`reflect` the address.** If the server enables gRPC server reflection,
+   this returns its service names and a descriptor set — no schema needed in
+   advance. Feed that descriptor set straight to the next steps.
+
+2. **Fall back to a schema when reflection is off.** Many production servers
+   (OpenVINO Model Server, NVIDIA Triton, and others) do not enable
+   reflection; `reflect` returns `ok: false` so the agent knows to get the
+   schema elsewhere — read it from the registry, or gather the service's
+   `.proto` from its Git repository and register it. Either way the agent now
+   holds a schema.
+
+3. **`list-types` to ground.** Enumerate the services and messages so the
+   agent knows the exact method and message names before calling.
+
+4. **`grpc-invoke` to call.** Unary and server-streaming methods, request and
+   responses as proto3 JSON, no generated stubs on either side. gRPC status
+   failures come back as `ok: false` with the status name — an outcome to
+   reason about, not an input to repair.
+
+5. **`generate-stubs` for a native client.** When the agent (or the human)
+   wants a real client rather than JSON-over-MCP calls, generate compilable
+   source in java, kotlin, python, cpp, csharp, ruby, php, or objc, plus
+   grpc-java service stubs. This is the right move for tensor-heavy or
+   high-throughput services, where hand-authoring message JSON is impractical.
+
+A worked end-to-end example against a real OpenVINO Model Server — reflect,
+fall back to the KServe schema, introspect the models, and run a text →
+embedding inference — is in [Operating an OpenVINO server](tutorials/openvino.md).
 
 ## Semantics
 
@@ -61,24 +114,25 @@ claude mcp add protomolt -- \
   Protocol-level problems (unknown method, malformed params) are JSON-RPC
   errors.
 - Results carry both `structuredContent` (the action's JSON document) and a
-  `text` content block with the same document serialized, for clients
-  without structured-output support.
-- Protocol revisions `2025-06-18`, `2025-03-26`, and `2024-11-05` are
-  accepted during initialization; unknown requested versions negotiate down
-  to the latest supported.
-- Stdout carries protocol traffic only; diagnostics go to stderr, as the
-  stdio transport requires.
+  `text` block with the same document serialized, for clients without
+  structured-output support.
+- Protocol revisions `2025-06-18`, `2025-03-26`, and `2024-11-05` are accepted
+  during initialization; unknown requested versions negotiate down to the
+  latest supported.
+- Stdout carries protocol traffic only; diagnostics go to stderr, as the stdio
+  transport requires.
 
 ## Framework hosts
 
 Spring AI and the Quarkus MCP server extension both accept programmatic tool
-registration, so the same catalog can be mounted in an existing framework
-MCP host without this module's transport. The adapter logic is the thin
-part; nothing needs rewriting to move between hosts.
+registration, so the same catalog can be mounted in an existing framework MCP
+host without this module's transport. The adapter logic is the thin part;
+nothing needs rewriting to move between hosts.
 
 ## Related
 
 - [Actions](actions.md) — the verb catalog this server exposes
 - [The registry](registry.md) — the store behind the resource URIs
-- [Roadmap](roadmap.md) — registry-backed type resolution and more
-  generator targets extend this surface next
+- [Operating an OpenVINO server](tutorials/openvino.md) — a full gRPC-agent walkthrough
+- [Roadmap](roadmap.md) — per-method dynamic tools and registry-backed type
+  resolution extend this surface next
