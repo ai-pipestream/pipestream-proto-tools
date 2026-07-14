@@ -26,7 +26,7 @@ prefix; Java packages use the `ai.pipestream.proto.*` namespace (see
 | `registry/` | `registry`, `registry-server` | Git-backed schema registry: subject/version store with compatibility-gated writes, served over the Confluent protocol |
 | `actions/` | `actions` | Self-describing verb catalog (compile, validate, diff, check-compat, render, evaluate) for consoles and LLM tooling |
 | `mcp/` | `mcp` | Model Context Protocol server over the action catalog and registry: plain-Java stdio, no framework |
-| `grpc/` | `grpc-invoke` | Dynamic gRPC invocation from descriptors: call unary and server-streaming methods with no generated stubs |
+| `grpc/` | `grpc-invoke` | Dynamic gRPC invocation and server reflection from descriptors: call methods and discover schemas with no generated stubs |
 | `codegen/` | `codegen` | Live code generation: every libprotoc generator (8 languages) and the grpc-java plugin as WebAssembly, no native toolchain |
 | `mapper/` | `mapper-core`, `mapper-cel`, `metadata` | Text mapping rules, CEL filters and selectors, CEL-driven metadata extraction |
 | `protobuf/` | `protobuf-metadata`, `protobuf-validation`, `protobuf-validation-protovalidate`, `protobuf-validation-conformance`, `protobuf-indexing` | Descriptor-option standards for metadata, validation, and indexing; protovalidate dialect and conformance harness |

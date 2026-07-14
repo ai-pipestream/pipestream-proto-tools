@@ -165,11 +165,17 @@ github.com/ai-pipestream/protobuf4j), where the generator series
 landed as one PR per language. Still open here: registry-backed type
 resolution in the MCP action context, per-language gRPC plugins
 (grpc_python and friends, vendored the way grpc-java was), and Rust
-once protobuf's Rust runtime story settles. The `grpc-invoke` verb is done:
-`protomolt-grpc-invoke` calls unary and server-streaming methods on live
-servers straight from descriptors (dynamic marshallers, no stubs), with
-metadata, deadlines, and a response cap that cancels open-ended streams
-cleanly.
+once protobuf's Rust runtime story settles. The `grpc-invoke` and `reflect` verbs are done: `protomolt-grpc-invoke`
+calls unary and server-streaming methods on live servers straight from
+descriptors (dynamic marshallers, no stubs), with metadata, deadlines,
+and a response cap that cancels open-ended streams cleanly; and `reflect`
+pulls a server's own descriptors over the gRPC server-reflection
+protocol, so a service can be operated given only its address. Together
+they make any reflection-enabled gRPC service an MCP integration with
+zero registration, and any service with a registered or reflectable
+schema operable by an agent. Verified live against a real OpenVINO Model
+Server (KServe v2 gRPC): server and model metadata introspected over
+MCP, tensor contracts and all.
 
 **5. A web console.** Every server host already serves `openapi.json`, and
 `MappingHelper` exists specifically to feed schema-browsing UIs. A bundled,

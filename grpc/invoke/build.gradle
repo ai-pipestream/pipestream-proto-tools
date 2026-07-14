@@ -7,9 +7,11 @@ dependencies {
 
     implementation project(':protomolt-json')
     implementation libs.grpc.stub
+    implementation libs.grpc.services
 
     runtimeOnly libs.grpc.netty.shaded
 
     testImplementation project(':protomolt-proto-sources')
     testImplementation libs.grpc.inprocess
+    testImplementation libs.grpc.protobuf
 }

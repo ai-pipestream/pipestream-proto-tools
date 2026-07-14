@@ -30,6 +30,8 @@ grpc-api = { module = "io.grpc:grpc-api", version.ref = "grpc" }
 grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 grpc-netty-shaded = { module = "io.grpc:grpc-netty-shaded", version.ref = "grpc" }
 grpc-inprocess = { module = "io.grpc:grpc-inprocess", version.ref = "grpc" }
+grpc-services = { module = "io.grpc:grpc-services", version.ref = "grpc" }
+grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
 chicory-runtime = { module = "com.dylibso.chicory:runtime", version.ref = "chicory" }
 chicory-wasi = { module = "com.dylibso.chicory:wasi", version.ref = "chicory" }
 chicory-compiler = { module = "com.dylibso.chicory:compiler", version.ref = "chicory" }

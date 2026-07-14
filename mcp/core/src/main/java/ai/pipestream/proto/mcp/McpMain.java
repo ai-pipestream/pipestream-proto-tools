@@ -4,6 +4,7 @@ import ai.pipestream.proto.actions.ActionCatalog;
 import ai.pipestream.proto.actions.ActionContext;
 import ai.pipestream.proto.codegen.GenerateStubsAction;
 import ai.pipestream.proto.grpc.invoke.GrpcInvokeAction;
+import ai.pipestream.proto.grpc.invoke.ReflectAction;
 import ai.pipestream.proto.registry.GitSchemaRegistryStore;
 
 import java.nio.file.Path;
@@ -45,6 +46,7 @@ public final class McpMain {
 
         ActionCatalog catalog = ActionCatalog.defaults(ActionContext.create())
                 .register(new GrpcInvokeAction())
+                .register(new ReflectAction())
                 .register(new GenerateStubsAction());
         String version = McpMain.class.getPackage().getImplementationVersion();
         if (registryPath == null) {

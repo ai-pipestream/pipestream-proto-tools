@@ -23,7 +23,11 @@ mcp/core/build/install/protomolt-mcp/bin/protomolt-mcp [--registry-git <path>]
 Without arguments the server exposes the ten catalog verbs as tools, plus
 `grpc-invoke` from `protomolt-grpc-invoke`: call any unary or server-streaming
 method on a live gRPC server, driven entirely by descriptors, with the request
-and responses as proto3 JSON. The service comes from the same schema-source
+and responses as proto3 JSON. And `reflect`: given only a `host:port`, fetch a
+server's own schema over the gRPC server-reflection protocol and return a
+descriptor set that feeds straight into the other verbs, so a service can be
+operated with nothing registered first (servers without reflection return
+`ok: false`, so the agent knows to fall back to a registered schema). The service comes from the same schema-source
 convention every action uses, so reading a subject's resource and passing its
 text as `sources` makes any registered service callable. gRPC status failures
 return `ok: false` with the status name; only malformed input is an error. And
