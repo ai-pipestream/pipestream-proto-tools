@@ -17,9 +17,3 @@ dependencies {
     // Configuration; the writer under test never does.
     testRuntimeOnly 'org.apache.hadoop:hadoop-client-runtime:3.4.1'
 }
-
-tasks.register('printRuntimeCp') {
-    def cp = configurations.runtimeClasspath
-    def jarTask = tasks.named('jar')
-    doLast { println jarTask.get().archiveFile.get().asFile.absolutePath + ':' + cp.asPath }
-}
