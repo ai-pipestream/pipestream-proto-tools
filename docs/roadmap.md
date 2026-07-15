@@ -188,6 +188,14 @@ mounts the same descriptors on the JSON/REST gateway with a generated
 OpenAPI document and bundled Swagger UI, and optionally the git-backed
 registry, in one process. See [The gRPC service](grpc-service.md).
 
+The dynamic-invocation layer also grew true streaming primitives — a
+flow-controlled, poll-shaped handle on server streams and a
+readiness-aware client-streaming call — and `protomolt-connect` builds a
+Kafka Connect plugin on them: a sink that drives any unary or
+client-streaming gRPC method from topics, and a source that feeds topics
+from a server stream, resumable across restarts via CEL-extracted tokens
+stored as Connect offsets. See [Kafka Connect](kafka-connect.md).
+
 **5. A web console.** Every server host already serves `openapi.json`, and
 `MappingHelper` exists specifically to feed schema-browsing UIs. A bundled,
 build-free console — schema browser, subject/version history, a try-it

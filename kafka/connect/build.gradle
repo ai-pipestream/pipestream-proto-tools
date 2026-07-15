@@ -1,4 +1,4 @@
-description = 'Kafka Connect sink: any topic drives any gRPC service, descriptor-native with no generated stubs'
+description = 'Kafka Connect sink and source: topics drive gRPC services and gRPC streams feed topics, descriptor-native with no generated stubs'
 
 dependencies {
     api project(':protomolt-grpc-invoke')
@@ -7,6 +7,7 @@ dependencies {
     compileOnly libs.kafka.connect.api
 
     implementation project(':protomolt-json')
+    implementation project(':protomolt-mapper-cel')
     implementation libs.protobuf.java.util
 
     runtimeOnly libs.grpc.netty.shaded

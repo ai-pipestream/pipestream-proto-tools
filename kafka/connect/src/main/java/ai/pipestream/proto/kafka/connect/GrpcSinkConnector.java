@@ -55,7 +55,6 @@ public final class GrpcSinkConnector extends SinkConnector {
     }
 
     static String pluginVersion() {
-        String version = GrpcSinkConnector.class.getPackage().getImplementationVersion();
-        return version != null ? version : "dev";
+        return GrpcConnectorSupport.pluginVersion();
     }
 }
