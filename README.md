@@ -198,4 +198,4 @@ imports are `ai.pipestream.proto.*`, configuration properties use the
 
 ## License
 
-[MIT](LICENSE) © 2026 ai.pipestream
+[Apache License 2.0](LICENSE) © 2026 ai.pipestream

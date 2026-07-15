@@ -2,6 +2,7 @@
   "name": "protomolt-console",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "The ProtoMolt schema-registry console: browse subjects and versions, explore types, diff schemas, check compatibility, and try messages against declared rules.",
   "scripts": {
