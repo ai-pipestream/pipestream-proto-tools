@@ -82,10 +82,10 @@ class ProtoMoltGrpcServiceTest {
     }
 
     @Test
-    void schemaCompilesAndDeclaresSixteenRpcs() {
+    void schemaCompilesAndDeclaresSeventeenRpcs() {
         assertThat(ProtoMoltServiceSchema.service().getFullName())
                 .isEqualTo("ai.pipestream.protomolt.v1.ProtoMoltService");
-        assertThat(ProtoMoltServiceSchema.service().getMethods()).hasSize(16);
+        assertThat(ProtoMoltServiceSchema.service().getMethods()).hasSize(17);
     }
 
     @Test
@@ -158,6 +158,50 @@ class ProtoMoltGrpcServiceTest {
         assertThat(result.path("message").path("rightId").asText()).isEqualTo("o-2");
         assertThat(result.path("protoSource").asText()).contains("string left_id = 1;");
         assertThat(result.path("descriptorSetBase64").asText()).isNotEmpty();
+    }
+
+    @Test
+    void mergeSchemasReportsThenEmitsThroughTheTypedSurface() throws Exception {
+        String orderProto = MAPPER.writeValueAsString(ORDER_PROTO);
+        String ticketProto = MAPPER.writeValueAsString("""
+                syntax = "proto3";
+                package support.v1;
+                message Ticket {
+                  string id = 1;
+                  int64 qty = 2;
+                  string owner = 3;
+                }
+                """);
+        String sources = """
+                "sources": [
+                   {"name": "order", "schema": {"sources": {"shop/v1/order.proto": %s}},
+                    "type": "shop.v1.Order"},
+                   {"name": "ticket", "schema": {"sources": {"support/v1/ticket.proto": %s}},
+                    "type": "support.v1.Ticket"}
+                 ]""".formatted(orderProto, ticketProto);
+
+        // Validate: int32 qty vs int64 qty is a hard clash; nothing is emitted.
+        JsonNode report = call("MergeSchemas",
+                "{\"name\": \"derived.v1.Case\", " + sources + "}");
+        assertThat(report.path("resolved").asBoolean()).isFalse();
+        JsonNode clash = report.path("clashes").get(1);
+        assertThat(clash.path("field").asText()).isEqualTo("qty");
+        assertThat(clash.path("kind").asText()).isEqualTo("type-clash");
+        assertThat(clash.path("suggested").path("names").path("order").asText())
+                .isEqualTo("order_qty");
+
+        // Resolve and emit: the merged proto plus both rulesets in one move.
+        JsonNode merged = call("MergeSchemas", "{\"name\": \"derived.v1.Case\", " + sources
+                + ", \"resolutions\": {\"qty\": {\"action\": \"rename\"}}}");
+        assertThat(merged.path("resolved").asBoolean()).isTrue();
+        assertThat(merged.path("protoSource").asText())
+                .contains("int32 order_qty")
+                .contains("int64 ticket_qty");
+        assertThat(merged.path("joinRules")).extracting(JsonNode::asText)
+                .contains("id = order.id", "id = ticket.id", "owner = ticket.owner");
+        assertThat(merged.path("unionRules").path("order").path("rules"))
+                .extracting(JsonNode::asText)
+                .containsExactly("id = order.id", "order_qty = order.qty");
     }
 
     @Test

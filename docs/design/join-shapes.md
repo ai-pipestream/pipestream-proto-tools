@@ -1,7 +1,8 @@
 # Joins, unions, and derived shapes (design)
 
 Status: design settled; phase 1 (multi-source resolution, shape synthesis,
-the `synthesize-shape` and `join-messages` verbs) is implemented.
+the `synthesize-shape`, `join-messages`, and `merge-schemas` verbs) is
+implemented.
 
 ## Motivation
 
@@ -51,6 +52,35 @@ with references, history, diffs, and compatibility gates. A join's output
 contract stops being implicit in a transformation config and becomes a
 governed schema. When the join definition changes, `check-compat` says
 whether downstream consumers survive it.
+
+## Schema merging: validate, resolve, emit
+
+Where projections pick fields, a **merge** carries *every* top-level field
+of two or more types into one new type — the schema-level join/union. The
+flow has three steps because clash analysis is pure descriptor work:
+
+1. **Validate.** The clash report is computed before anything is
+   generated. Same name + same type is `coalesced` — an info entry, and
+   the natural join keys. Same name + different type (`order.status:
+   string` vs `ticket.status: enum`) or different cardinality is a hard
+   clash that blocks emission.
+2. **Resolve.** The caller decides each hard clash: `rename` (each
+   source's field kept under a new name, defaulting to
+   `<source>_<field>` — the suggested default, since prefixing is almost
+   always what people want), `prefer` (one source's field wins), or an
+   override of a default coalesce.
+3. **Emit.** One move produces the merged proto source (registrable, true
+   import paths), the compiled descriptor set, and both relationships to
+   the new type: the **defined join** — one ruleset reading every source
+   at once (coalesced singular fields let later sources overwrite,
+   absent values skip; coalesced repeated fields accumulate) — and the
+   **defined union** — one ruleset per source, mapping it alone onto the
+   merged shape, the structural `UNION`.
+
+The `merge-schemas` verb carries the flow on every surface; `reportOnly`
+runs the validation step standalone. Map-typed fields are not yet
+mergeable (rejected with a clear error); they need synthesized map-entry
+types and are deferred.
 
 ## Multi-source resolution
 

@@ -109,34 +109,59 @@ public final class ShapeSynthesizer {
         }
         Map<String, Descriptor> byName = new LinkedHashMap<>();
         sources.forEach(source -> byName.put(source.name(), source.type()));
-        DescriptorProto.Builder message = DescriptorProto.newBuilder()
-                .setName(simpleName(fullName));
-        List<FileDescriptor> dependencies = new ArrayList<>();
-        List<String> impliedRules = new ArrayList<>();
+        List<NamedField> named = new ArrayList<>(fields.size());
+        List<String> impliedRules = new ArrayList<>(fields.size());
         Set<String> seen = new LinkedHashSet<>();
-        int number = 1;
         for (ProjectedField projected : fields) {
             if (!seen.add(projected.name())) {
                 throw new IllegalArgumentException("Duplicate projected field: "
                         + projected.name());
             }
-            FieldDescriptor resolved = resolve(byName, projected.sourcePath());
+            named.add(new NamedField(projected.name(), resolve(byName, projected.sourcePath())));
+            impliedRules.add(projected.name() + " = " + projected.sourcePath());
+        }
+        return fromFields(fullName, named, impliedRules);
+    }
+
+    /** A field of a synthesized flat message, typed by the source field it comes from. */
+    public record NamedField(String name, FieldDescriptor typedBy) {
+        public NamedField {
+            requireIdentifier(name, "field name");
+            Objects.requireNonNull(typedBy, "typedBy");
+        }
+    }
+
+    /** Builds a flat message from named fields, each typed by a source field descriptor. */
+    public SynthesizedShape fromFields(String fullName, List<NamedField> fields,
+                                       List<String> impliedRules) {
+        if (fields.isEmpty()) {
+            throw new IllegalArgumentException("A shape needs at least one field");
+        }
+        DescriptorProto.Builder message = DescriptorProto.newBuilder()
+                .setName(simpleName(fullName));
+        List<FileDescriptor> dependencies = new ArrayList<>();
+        int number = 1;
+        for (NamedField named : fields) {
+            FieldDescriptor typedBy = named.typedBy();
+            if (typedBy.isMapField()) {
+                throw new IllegalArgumentException("Map field '" + typedBy.getName()
+                        + "' cannot be carried into a synthesized shape yet");
+            }
             FieldDescriptorProto.Builder field = FieldDescriptorProto.newBuilder()
-                    .setName(projected.name())
+                    .setName(named.name())
                     .setNumber(number++)
-                    .setLabel(resolved.isRepeated()
+                    .setLabel(typedBy.isRepeated()
                             ? FieldDescriptorProto.Label.LABEL_REPEATED
                             : FieldDescriptorProto.Label.LABEL_OPTIONAL)
-                    .setType(resolved.getType().toProto());
-            if (resolved.getJavaType() == FieldDescriptor.JavaType.MESSAGE) {
-                field.setTypeName("." + resolved.getMessageType().getFullName());
-                dependencies.add(resolved.getMessageType().getFile());
-            } else if (resolved.getJavaType() == FieldDescriptor.JavaType.ENUM) {
-                field.setTypeName("." + resolved.getEnumType().getFullName());
-                dependencies.add(resolved.getEnumType().getFile());
+                    .setType(typedBy.getType().toProto());
+            if (typedBy.getJavaType() == FieldDescriptor.JavaType.MESSAGE) {
+                field.setTypeName("." + typedBy.getMessageType().getFullName());
+                dependencies.add(typedBy.getMessageType().getFile());
+            } else if (typedBy.getJavaType() == FieldDescriptor.JavaType.ENUM) {
+                field.setTypeName("." + typedBy.getEnumType().getFullName());
+                dependencies.add(typedBy.getEnumType().getFile());
             }
             message.addField(field);
-            impliedRules.add(projected.name() + " = " + projected.sourcePath());
         }
         return link(fullName, message, dependencies, impliedRules);
     }
@@ -263,7 +288,8 @@ public final class ShapeSynthesizer {
         return out.toString();
     }
 
-    private static String typeKeyword(FieldDescriptor field) {
+    /** The proto keyword or full type name a field declares — also used in clash reports. */
+    static String typeKeyword(FieldDescriptor field) {
         return switch (field.getJavaType()) {
             case MESSAGE -> field.getMessageType().getFullName();
             case ENUM -> field.getEnumType().getFullName();

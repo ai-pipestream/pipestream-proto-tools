@@ -214,7 +214,13 @@ whose field types are inferred from scoped source paths, and oneof tagged
 unions — emitted as registrable proto source with true import paths, and
 joins named messages through multi-source mapping scopes (text rules and
 CEL reading from every source at once). Exposed as the `synthesize-shape`
-and `join-messages` verbs on all surfaces. Planned next per the design:
+and `join-messages` verbs on all surfaces. `merge-schemas` completes the
+schema-level story: merge the fields of two or more types into one new
+type through a validate-resolve-emit flow — the clash report (same name,
+different type or cardinality) is computed from descriptors alone, the
+caller decides each clash (rename with source prefixes, prefer one side,
+or override a coalesce), and one move then emits the merged proto with
+its defined-join and defined-union rulesets. Planned next per the design:
 keyed joins over two gRPC server streams with bounded buffers, and a
 schema-declared key option.
 

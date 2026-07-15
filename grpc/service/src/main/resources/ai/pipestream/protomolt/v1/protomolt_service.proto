@@ -62,6 +62,11 @@ service ProtoMoltService {
   // populated by scoped rules, or a shape synthesized on the fly.
   rpc JoinMessages(JoinMessagesRequest) returns (JoinMessagesResponse);
 
+  // Merges the fields of two or more message types into one new type: a
+  // clash report first, caller-decided resolutions, then the merged proto
+  // plus its join and union mapping rules in one move.
+  rpc MergeSchemas(MergeSchemasRequest) returns (MergeSchemasResponse);
+
   // Fetches a live gRPC server's schema over server reflection, given only
   // its address. Servers without reflection return ok=false.
   rpc Reflect(ReflectRequest) returns (ReflectResponse);
@@ -435,4 +440,65 @@ message JoinMessagesResponse {
   // Present when the shape was synthesized.
   string descriptor_set_base64 = 3;
   string proto_source = 4;
+}
+
+// A caller's decision for a clashing field name in merge-schemas.
+message MergeResolution {
+  // 'rename', 'prefer', or 'coalesce'.
+  string action = 1;
+  // prefer: the source whose field wins.
+  string source = 2;
+  // rename: new field name per source; missing entries default to
+  // '<source>_<field>'.
+  map<string, string> names = 3;
+}
+
+message MergeSchemasRequest {
+  // Fully qualified name of the merged message.
+  string name = 1;
+  // Two or more; for coalesced singular fields, later sources overwrite
+  // earlier ones at join time. 'message' is unused here.
+  repeated ShapeSource sources = 2;
+  // Keyed by clashing field name.
+  map<string, MergeResolution> resolutions = 3;
+  // Return only the clash report, even when the merge is clean.
+  bool report_only = 4;
+}
+
+// One source's contribution to a clashing field name.
+message ClashOrigin {
+  string source = 1;
+  // Proto keyword or full type name, 'repeated '-prefixed when repeated.
+  string type = 2;
+}
+
+message MergeClash {
+  string field = 1;
+  // 'coalesced' (info: same type, merged into one field - the natural join
+  // keys), 'type-clash', or 'cardinality-clash'.
+  string kind = 2;
+  repeated ClashOrigin origins = 3;
+  MergeResolution suggested = 4;
+}
+
+message MergeSchemasResponse {
+  // False while hard clashes await resolutions (or report_only was set);
+  // the emission fields below are present only when true.
+  bool resolved = 1;
+  repeated MergeClash clashes = 2;
+  string type = 3;
+  // Import path of the merged file.
+  string file = 4;
+  // Registrable proto source; imports carry the sources' true paths.
+  string proto_source = 5;
+  string descriptor_set_base64 = 6;
+  // The defined join: one ruleset reading every source at once.
+  repeated string join_rules = 7;
+  // The defined union: one ruleset per source, mapping it alone onto the
+  // merged shape.
+  map<string, MergeRuleList> union_rules = 8;
+}
+
+message MergeRuleList {
+  repeated string rules = 1;
 }
