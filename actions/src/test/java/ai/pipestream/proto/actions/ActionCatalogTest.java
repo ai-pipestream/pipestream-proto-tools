@@ -17,12 +17,12 @@ class ActionCatalogTest {
     private static final List<String> BUILT_INS = List.of(
             "compile", "validate-message", "diff-schemas", "check-compat", "render-json-schema",
             "render-index-mappings", "eval-cel", "map-message", "synthesize-shape",
-            "join-messages", "merge-schemas", "extract-metadata", "list-types");
+            "join-messages", "merge-schemas", "check-rules", "extract-metadata", "list-types");
 
     private final ActionCatalog catalog = ActionCatalog.defaults(TestFixtures.personContext());
 
     @Test
-    void defaultsRegistersAllThirteenBuiltIns() {
+    void defaultsRegistersAllFourteenBuiltIns() {
         assertThat(catalog.names()).containsExactlyInAnyOrderElementsOf(BUILT_INS);
     }
 

@@ -2,6 +2,8 @@ package ai.pipestream.proto.grpc.service;
 
 import ai.pipestream.proto.actions.ActionCatalog;
 import ai.pipestream.proto.actions.ActionContext;
+import ai.pipestream.proto.chain.CheckChainAction;
+import ai.pipestream.proto.chain.RunChainAction;
 import ai.pipestream.proto.codegen.GenerateStubsAction;
 import ai.pipestream.proto.gather.git.GatherGitAction;
 import ai.pipestream.proto.grpc.invoke.GrpcInvokeAction;
@@ -10,7 +12,7 @@ import ai.pipestream.proto.grpc.invoke.ReflectAction;
 import java.nio.file.Path;
 
 /**
- * The full seventeen-verb catalog: the built-in actions plus the gRPC verbs
+ * The full twenty-verb catalog: the built-in actions plus the gRPC verbs
  * ({@code reflect}, {@code grpc-invoke}), {@code generate-stubs}, and {@code gather-git} — the same surface the
  * MCP server exposes, and exactly the RPCs of {@code ProtoMoltService}.
  */
@@ -33,6 +35,8 @@ public final class ProtoMoltCatalog {
                 .register(new GrpcInvokeAction())
                 .register(new ReflectAction())
                 .register(new GenerateStubsAction())
-                .register(new GatherGitAction(gatherCacheRoot));
+                .register(new GatherGitAction(gatherCacheRoot))
+                .register(new RunChainAction())
+                .register(new CheckChainAction());
     }
 }

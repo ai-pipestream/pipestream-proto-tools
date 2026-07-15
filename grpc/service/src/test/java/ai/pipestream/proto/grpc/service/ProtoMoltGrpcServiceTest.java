@@ -82,10 +82,10 @@ class ProtoMoltGrpcServiceTest {
     }
 
     @Test
-    void schemaCompilesAndDeclaresSeventeenRpcs() {
+    void schemaCompilesAndDeclaresTwentyRpcs() {
         assertThat(ProtoMoltServiceSchema.service().getFullName())
                 .isEqualTo("ai.pipestream.protomolt.v1.ProtoMoltService");
-        assertThat(ProtoMoltServiceSchema.service().getMethods()).hasSize(17);
+        assertThat(ProtoMoltServiceSchema.service().getMethods()).hasSize(20);
     }
 
     @Test

@@ -67,6 +67,18 @@ service ProtoMoltService {
   // plus its join and union mapping rules in one move.
   rpc MergeSchemas(MergeSchemasRequest) returns (MergeSchemasResponse);
 
+  // Statically validates mapping rules and CEL expressions (filters must be
+  // boolean) against descriptors; with sample messages, also dry-runs them.
+  rpc CheckRules(CheckRulesRequest) returns (CheckRulesResponse);
+
+  // Executes an inline chain: serial typed gRPC calls, each request mapped
+  // from the chain input and every prior step's response.
+  rpc RunChain(RunChainRequest) returns (RunChainResponse);
+
+  // Statically verifies a chain: methods resolve and are unary, every
+  // mapping and CEL expression type-checks at each step's scope.
+  rpc CheckChain(CheckChainRequest) returns (CheckChainResponse);
+
   // Fetches a live gRPC server's schema over server reflection, given only
   // its address. Servers without reflection return ok=false.
   rpc Reflect(ReflectRequest) returns (ReflectResponse);
@@ -501,4 +513,115 @@ message MergeSchemasResponse {
 
 message MergeRuleList {
   repeated string rules = 1;
+}
+
+message CheckRulesRequest {
+  // One source (in-place mode: unscoped paths, the name is the CEL variable)
+  // or many (scoped mode). A 'message' on every source enables the dry run.
+  repeated ShapeSource sources = 1;
+  // The output type rules write to; required with multiple sources.
+  JoinTarget target = 2;
+  repeated string rules = 3;
+  repeated CelRule cel_rules = 4;
+  // Boolean CEL predicates.
+  repeated string filters = 5;
+}
+
+message RuleFinding {
+  // 'rule', 'celRule', or 'filter'.
+  string kind = 1;
+  int32 index = 2;
+  string rule = 3;
+  string error = 4;
+}
+
+message CheckRulesResponse {
+  bool ok = 1;
+  repeated RuleFinding findings = 2;
+  // Dry-run results, present when every source carried a sample message
+  // and the static pass was clean.
+  string type = 3;
+  google.protobuf.Struct message = 4;
+  repeated bool filter_results = 5;
+  // A dynamic failure the static pass could not see (e.g. a Struct path).
+  string dry_run_error = 6;
+}
+
+// One step of a chain: a unary call whose request is mapped from the chain
+// scope ('input' plus every prior step's response, by step name).
+message ChainStep {
+  string name = 1;
+  // gRPC target, e.g. 'host:9090'.
+  string target = 2;
+  // Use TLS; default plaintext.
+  bool tls = 3;
+  // 'package.Service/Method'; must be unary.
+  string method = 4;
+  // Boolean CEL gate; a false skips the step.
+  string when = 5;
+  // Scoped rules building the request message.
+  repeated string rules = 6;
+  repeated CelRule cel_rules = 7;
+  // Validate the response against its declared rules before proceeding.
+  bool validate = 8;
+  // Per-step deadline, bounded by what remains of the chain's.
+  int32 deadline_ms = 9;
+}
+
+// The chain's output mapping; without it the last step's response returns.
+message ChainOutput {
+  string type = 1;
+  repeated string rules = 2;
+  repeated CelRule cel_rules = 3;
+}
+
+message ChainDefinition {
+  string name = 1;
+  // Declares every step's service and message types (e.g. from reflect,
+  // gather-git, or a registry descriptor set).
+  SchemaSource schema = 2;
+  string input_type = 3;
+  // Overall deadline; default 30000.
+  int32 deadline_ms = 4;
+  repeated ChainStep steps = 5;
+  ChainOutput output = 6;
+}
+
+message RunChainRequest {
+  ChainDefinition chain = 1;
+  // The chain input, as proto3 JSON of input_type.
+  google.protobuf.Struct input = 2;
+}
+
+message ChainStepResult {
+  string name = 1;
+  bool skipped = 2;
+}
+
+message RunChainResponse {
+  bool ok = 1;
+  string output_type = 2;
+  google.protobuf.Struct output = 3;
+  repeated ChainStepResult steps = 4;
+  // When ok=false: which step failed and why (gRPC status, gate error, or
+  // validation violations).
+  string failed_step = 5;
+  string error = 6;
+}
+
+message CheckChainRequest {
+  ChainDefinition chain = 1;
+}
+
+message ChainFinding {
+  // The step name, or '' for chain-level findings.
+  string step = 1;
+  // 'method', 'when', 'rule', 'celRule', 'output', or 'chain'.
+  string kind = 2;
+  string error = 3;
+}
+
+message CheckChainResponse {
+  bool ok = 1;
+  repeated ChainFinding findings = 2;
 }
