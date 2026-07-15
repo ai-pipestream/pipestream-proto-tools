@@ -24,6 +24,7 @@ build-from-clone quick start. The guides here cover each subsystem in depth.
 | [Search indexing](indexing.md) | Indexing hints, plans, NDJSON output, and the Lucene/OpenSearch/Solr plugins |
 | [Emitting bundles](emitting.md) | The bundle/sink SPI (directory, git, zip), OKF knowledge bundles, and descriptor-driven Parquet |
 | [Microsoft Graph](msgraph.md) | OneDrive/SharePoint files and metadata, and agentless Copilot connector ingestion |
+| [Apache Iceberg](iceberg.md) | Descriptor-driven table schemas and snapshot appends through any Iceberg catalog |
 | [REST gateway and servers](rest-gateway.md) | JSON transcoding, the gateway, OpenAPI, and the six server hosts |
 | [Framework integrations](framework-integrations.md) | Spring Boot auto-configuration and the Quarkus extension |
 | [Core utilities](helpers.md) | `Any`/`Struct` handling, type conversion, message diff, schema hygiene |

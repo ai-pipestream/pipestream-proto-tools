@@ -33,6 +33,8 @@ class ParquetEmitterTest {
     private static final String PROTO = """
             syntax = "proto3";
             package pq.test;
+            import "google/protobuf/timestamp.proto";
+            import "google/protobuf/struct.proto";
             message Reading {
               string sensor = 1;
               int64 count = 2;
@@ -45,6 +47,8 @@ class ParquetEmitterTest {
               repeated string tags = 9;
               map<string, int64> attrs = 10;
               Location location = 11;
+              google.protobuf.Timestamp observed = 12;
+              google.protobuf.Struct extra = 13;
             }
             message Location { double lat = 1; double lon = 2; }
             enum Unit { UNIT_UNSPECIFIED = 0; UNIT_CELSIUS = 1; }
@@ -55,6 +59,16 @@ class ParquetEmitterTest {
         CompiledProtos compiled = new ProtoSourceCompiler().compile(ProtoSourceSet.builder()
                 .add("pq/test/pq.proto", PROTO, "test").build());
         return compiled.descriptorFor("pq/test/pq.proto").orElseThrow();
+    }
+
+    private static com.google.protobuf.Message timestamp(FileDescriptor file, long seconds,
+                                                         int nanos) {
+        Descriptor type = file.findMessageTypeByName("Reading")
+                .findFieldByName("observed").getMessageType();
+        return DynamicMessage.newBuilder(type)
+                .setField(type.findFieldByName("seconds"), seconds)
+                .setField(type.findFieldByName("nanos"), nanos)
+                .build();
     }
 
     private static DynamicMessage reading(Descriptor type, Descriptor location, int i,
@@ -72,7 +86,10 @@ class ParquetEmitterTest {
                 .setField(type.findFieldByName("location"), DynamicMessage.newBuilder(location)
                         .setField(location.findFieldByName("lat"), 40.7)
                         .setField(location.findFieldByName("lon"), -74.0)
-                        .build());
+                        .build())
+                .setField(type.findFieldByName("observed"),
+                        timestamp(type.getFile(), 1_700_000_000L, 123_000))
+                .setField(type.findFieldByName("extra"), structOf(type));
         builder.addRepeatedField(type.findFieldByName("tags"), "a");
         builder.addRepeatedField(type.findFieldByName("tags"), "b");
         Descriptor entry = type.findFieldByName("attrs").getMessageType();
@@ -84,6 +101,18 @@ class ParquetEmitterTest {
             builder.setField(type.findFieldByName("note"), "calibrated");
         }
         return builder.build();
+    }
+
+    private static com.google.protobuf.Message structOf(Descriptor reading) {
+        Descriptor structType = reading.findFieldByName("extra").getMessageType();
+        DynamicMessage.Builder struct = DynamicMessage.newBuilder(structType);
+        try {
+            com.google.protobuf.util.JsonFormat.parser().merge(
+                    "{\"source\": \"probe\", \"level\": 7}", struct);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+        return struct.build();
     }
 
     /** ParquetReader over a plain InputFile — no Hadoop filesystem anywhere in the test. */
@@ -125,14 +154,19 @@ class ParquetEmitterTest {
             assertThat(first.getLong("unsigned", 0)).isEqualTo(4294967295L);
             assertThat(first.getBinary("unit", 0).toStringUsingUTF8())
                     .isEqualTo("UNIT_CELSIUS");
-            assertThat(first.getFieldRepetitionCount("tags")).isEqualTo(2);
-            assertThat(first.getString("tags", 1)).isEqualTo("b");
-            Group attr = first.getGroup("attrs", 0);
+            Group tags = first.getGroup("tags", 0);
+            assertThat(tags.getFieldRepetitionCount("list")).isEqualTo(2);
+            assertThat(tags.getGroup("list", 1).getString("element", 0)).isEqualTo("b");
+            Group attr = first.getGroup("attrs", 0).getGroup("key_value", 0);
             assertThat(attr.getString("key", 0)).isEqualTo("retries");
             assertThat(attr.getLong("value", 0)).isEqualTo(3L);
             Group loc = first.getGroup("location", 0);
             assertThat(loc.getDouble("lat", 0)).isEqualTo(40.7);
             assertThat(first.getString("note", 0)).isEqualTo("calibrated");
+            // Timestamp is a real microsecond column, Struct a JSON string column.
+            assertThat(first.getLong("observed", 0)).isEqualTo(1_700_000_000_000_123L);
+            assertThat(first.getBinary("extra", 0).toStringUsingUTF8())
+                    .contains("\"source\":\"probe\"").contains("\"level\":7");
 
             Group second = reader.read();
             assertThat(second.getString("sensor", 0)).isEqualTo("s1");

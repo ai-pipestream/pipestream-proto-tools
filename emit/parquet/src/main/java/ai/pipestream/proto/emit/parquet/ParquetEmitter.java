@@ -30,11 +30,21 @@ public final class ParquetEmitter {
     /** Writes one Parquet file of {@code messages} (all instances of {@code descriptor}). */
     public static byte[] toBytes(Descriptor descriptor, Iterable<? extends Message> messages)
             throws IOException {
+        return toBytes(descriptor, messages, ProtoParquetSchemas.FieldIdResolver.NONE);
+    }
+
+    /**
+     * Writes with column ids stamped into the file schema — how table formats (Iceberg)
+     * identify columns natively, no name-mapping fallback involved.
+     */
+    public static byte[] toBytes(Descriptor descriptor, Iterable<? extends Message> messages,
+                                 ProtoParquetSchemas.FieldIdResolver ids)
+            throws IOException {
         Objects.requireNonNull(descriptor, "descriptor");
         Objects.requireNonNull(messages, "messages");
         InMemoryOutputFile output = new InMemoryOutputFile();
         try (ParquetWriter<Message> writer = new Builder(output,
-                new ProtoParquetWriteSupport(descriptor))
+                new ProtoParquetWriteSupport(descriptor, ids))
                 .withCompressionCodec(CompressionCodecName.SNAPPY)
                 // The non-Hadoop path, both halves: PlainParquetConfiguration keeps our
                 // write support off Hadoop, and the codec factory keeps parquet's own

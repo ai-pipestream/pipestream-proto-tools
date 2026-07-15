@@ -3,6 +3,7 @@ description = 'Parquet renderer: descriptor-driven columnar files from protobuf 
 dependencies {
     api project(':protomolt-emit')
     api libs.protobuf.java
+    implementation libs.protobuf.java.util
 
     implementation libs.parquet.hadoop
     implementation 'org.xerial.snappy:snappy-java:1.1.10.7'

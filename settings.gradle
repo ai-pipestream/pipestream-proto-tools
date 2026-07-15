@@ -39,6 +39,8 @@ include 'protomolt-emit-parquet'
 project(':protomolt-emit-parquet').projectDir = file('emit/parquet')
 include 'protomolt-msgraph'
 project(':protomolt-msgraph').projectDir = file('graph')
+include 'protomolt-iceberg'
+project(':protomolt-iceberg').projectDir = file('lake/iceberg')
 
 include 'protomolt-gather-maven'
 project(':protomolt-gather-maven').projectDir = file('gather/maven')

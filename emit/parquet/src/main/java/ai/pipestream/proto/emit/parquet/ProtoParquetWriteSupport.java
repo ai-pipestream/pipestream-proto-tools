@@ -5,6 +5,7 @@ import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.EnumValueDescriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Message;
+import com.google.protobuf.util.JsonFormat;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.hadoop.api.WriteSupport;
 import org.apache.parquet.io.api.Binary;
@@ -16,9 +17,11 @@ import java.util.Objects;
 
 /**
  * Streams protobuf messages (dynamic or generated — only the descriptor matters) into a
- * Parquet {@link RecordConsumer}, mirroring {@link ProtoParquetSchemas}' shape exactly:
- * required scalars always write (proto3 defaults are values), optional scalars and message
- * fields write only when present, repeated fields and map entries write per element.
+ * Parquet {@link RecordConsumer}, mirroring {@link ProtoParquetSchemas}' spec-compliant
+ * shapes exactly: required scalars always write (proto3 defaults are values), optional
+ * scalars and message fields write only when present, repeated fields write as three-level
+ * lists, maps as annotated key/value groups, {@code google.protobuf.Timestamp} as
+ * microsecond timestamps, and the JSON well-known types as JSON strings.
  */
 final class ProtoParquetWriteSupport extends WriteSupport<Message> {
 
@@ -27,8 +30,13 @@ final class ProtoParquetWriteSupport extends WriteSupport<Message> {
     private RecordConsumer consumer;
 
     ProtoParquetWriteSupport(Descriptor descriptor) {
+        this(descriptor, ProtoParquetSchemas.FieldIdResolver.NONE);
+    }
+
+    ProtoParquetWriteSupport(Descriptor descriptor,
+                             ProtoParquetSchemas.FieldIdResolver ids) {
         this.descriptor = Objects.requireNonNull(descriptor, "descriptor");
-        this.schema = ProtoParquetSchemas.schema(descriptor);
+        this.schema = ProtoParquetSchemas.schema(descriptor, ids);
     }
 
     @Override
@@ -77,40 +85,11 @@ final class ProtoParquetWriteSupport extends WriteSupport<Message> {
 
     private void writeField(Message message, FieldDescriptor field, int index) {
         if (field.isMapField()) {
-            int count = message.getRepeatedFieldCount(field);
-            if (count == 0) {
-                return;
-            }
-            consumer.startField(field.getName(), index);
-            FieldDescriptor key = field.getMessageType().findFieldByName("key");
-            FieldDescriptor value = field.getMessageType().findFieldByName("value");
-            for (int i = 0; i < count; i++) {
-                Message entry = (Message) message.getRepeatedField(field, i);
-                consumer.startGroup();
-                consumer.startField("key", 0);
-                writePrimitive(key, entry.getField(key));
-                consumer.endField("key", 0);
-                if (value.getJavaType() != FieldDescriptor.JavaType.MESSAGE
-                        || entry.hasField(value)) {
-                    consumer.startField("value", 1);
-                    writeValue(value, entry.getField(value));
-                    consumer.endField("value", 1);
-                }
-                consumer.endGroup();
-            }
-            consumer.endField(field.getName(), index);
+            writeMap(message, field, index);
             return;
         }
         if (field.isRepeated()) {
-            int count = message.getRepeatedFieldCount(field);
-            if (count == 0) {
-                return;
-            }
-            consumer.startField(field.getName(), index);
-            for (int i = 0; i < count; i++) {
-                writeValue(field, message.getRepeatedField(field, i));
-            }
-            consumer.endField(field.getName(), index);
+            writeList(message, field, index);
             return;
         }
         boolean tracksPresence = field.getJavaType() == FieldDescriptor.JavaType.MESSAGE
@@ -123,8 +102,60 @@ final class ProtoParquetWriteSupport extends WriteSupport<Message> {
         consumer.endField(field.getName(), index);
     }
 
+    /** The spec's three-level list: name (LIST) > repeated "list" > "element". */
+    private void writeList(Message message, FieldDescriptor field, int index) {
+        int count = message.getRepeatedFieldCount(field);
+        if (count == 0) {
+            return;
+        }
+        consumer.startField(field.getName(), index);
+        consumer.startGroup();
+        consumer.startField("list", 0);
+        for (int i = 0; i < count; i++) {
+            consumer.startGroup();
+            consumer.startField("element", 0);
+            writeValue(field, message.getRepeatedField(field, i));
+            consumer.endField("element", 0);
+            consumer.endGroup();
+        }
+        consumer.endField("list", 0);
+        consumer.endGroup();
+        consumer.endField(field.getName(), index);
+    }
+
+    /** The spec's map: name (MAP) > repeated "key_value" > required key, value. */
+    private void writeMap(Message message, FieldDescriptor field, int index) {
+        int count = message.getRepeatedFieldCount(field);
+        if (count == 0) {
+            return;
+        }
+        FieldDescriptor key = field.getMessageType().findFieldByName("key");
+        FieldDescriptor value = field.getMessageType().findFieldByName("value");
+        consumer.startField(field.getName(), index);
+        consumer.startGroup();
+        consumer.startField("key_value", 0);
+        for (int i = 0; i < count; i++) {
+            Message entry = (Message) message.getRepeatedField(field, i);
+            consumer.startGroup();
+            consumer.startField("key", 0);
+            writePrimitive(key, entry.getField(key));
+            consumer.endField("key", 0);
+            boolean plainMessageValue = value.getJavaType() == FieldDescriptor.JavaType.MESSAGE
+                    && !special(value);
+            if (!plainMessageValue || entry.hasField(value)) {
+                consumer.startField("value", 1);
+                writeValue(value, entry.getField(value));
+                consumer.endField("value", 1);
+            }
+            consumer.endGroup();
+        }
+        consumer.endField("key_value", 0);
+        consumer.endGroup();
+        consumer.endField(field.getName(), index);
+    }
+
     private void writeValue(FieldDescriptor field, Object value) {
-        if (field.getJavaType() == FieldDescriptor.JavaType.MESSAGE) {
+        if (field.getJavaType() == FieldDescriptor.JavaType.MESSAGE && !special(field)) {
             consumer.startGroup();
             writeFields((Message) value);
             consumer.endGroup();
@@ -133,7 +164,32 @@ final class ProtoParquetWriteSupport extends WriteSupport<Message> {
         writePrimitive(field, value);
     }
 
+    private static boolean special(FieldDescriptor field) {
+        String fullName = field.getMessageType().getFullName();
+        return ProtoParquetSchemas.TIMESTAMP.equals(fullName)
+                || ProtoParquetSchemas.JSON_TYPES.contains(fullName);
+    }
+
     private void writePrimitive(FieldDescriptor field, Object value) {
+        if (field.getJavaType() == FieldDescriptor.JavaType.MESSAGE) {
+            Message message = (Message) value;
+            if (ProtoParquetSchemas.TIMESTAMP.equals(
+                    field.getMessageType().getFullName())) {
+                Descriptor type = message.getDescriptorForType();
+                long seconds = (Long) message.getField(type.findFieldByName("seconds"));
+                int nanos = (Integer) message.getField(type.findFieldByName("nanos"));
+                consumer.addLong(seconds * 1_000_000L + nanos / 1_000L);
+                return;
+            }
+            try {
+                consumer.addBinary(Binary.fromString(JsonFormat.printer()
+                        .omittingInsignificantWhitespace().print(message)));
+            } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+                throw new IllegalStateException("Unprintable JSON well-known type: "
+                        + e.getMessage(), e);
+            }
+            return;
+        }
         switch (field.getType()) {
             case INT32, SINT32, SFIXED32 -> consumer.addInteger((Integer) value);
             case UINT32, FIXED32 -> consumer.addLong(Integer.toUnsignedLong((Integer) value));
