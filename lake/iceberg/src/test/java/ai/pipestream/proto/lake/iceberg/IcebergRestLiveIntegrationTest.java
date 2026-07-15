@@ -118,12 +118,19 @@ class IcebergRestLiveIntegrationTest {
         // different users; whoever owns the table tree must be the data writer.
         java.nio.file.Path base = java.nio.file.Path.of(
                 "/tmp/protomolt-iceberg-warehouse/client/" + id.name());
-        java.nio.file.Files.createDirectories(base);
-        try {
-            java.nio.file.Files.setPosixFilePermissions(base,
-                    java.nio.file.attribute.PosixFilePermissions.fromString("rwxrwxrwx"));
-        } catch (UnsupportedOperationException ignored) {
-            // non-POSIX filesystem: single-user anyway
+        // Pre-create the WHOLE table tree world-writable: the catalog service (uid 1000
+        // in the container) writes metadata.json here while this JVM (a different uid on
+        // CI) writes manifests and data - whoever creates a directory first owns it, so
+        // neither side may be the one to create a directory the other must write into.
+        for (String dir : new String[]{"", "metadata", "data"}) {
+            java.nio.file.Path path = dir.isEmpty() ? base : base.resolve(dir);
+            java.nio.file.Files.createDirectories(path);
+            try {
+                java.nio.file.Files.setPosixFilePermissions(path,
+                        java.nio.file.attribute.PosixFilePermissions.fromString("rwxrwxrwx"));
+            } catch (UnsupportedOperationException ignored) {
+                // non-POSIX filesystem: single-user anyway
+            }
         }
         Table table = IcebergSink.ensureTable(catalog, id, type, "file://" + base);
         try {
