@@ -55,7 +55,7 @@ class StdioRoundTripTest {
         assertThat(init.get("result").get("capabilities").has("resources")).isTrue();
 
         JsonNode tools = mapper.readTree(lines[1]);
-        assertThat(tools.get("result").get("tools").size()).isEqualTo(10);
+        assertThat(tools.get("result").get("tools").size()).isEqualTo(12);
 
         JsonNode resources = mapper.readTree(lines[2]);
         assertThat(resources.get("result").get("resources").findValuesAsText("uri"))

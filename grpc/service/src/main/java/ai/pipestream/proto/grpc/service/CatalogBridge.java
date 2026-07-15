@@ -18,7 +18,7 @@ import java.util.Locale;
  *
  * <p>Every request message's canonical proto3 JSON form is exactly the action's input envelope,
  * and every action's output envelope parses as the response message — so the bridge is one
- * print, one dispatch, one parse, for all thirteen verbs alike.
+ * print, one dispatch, one parse, for every verb alike.
  */
 public final class CatalogBridge {
 

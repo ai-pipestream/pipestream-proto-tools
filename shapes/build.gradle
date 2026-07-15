@@ -1,0 +1,13 @@
+description = 'Joins, unions, and derived shapes: multi-source mapping scopes and runtime message-type synthesis'
+
+dependencies {
+    api project(':protomolt-mapper-cel')
+    api libs.protobuf.java
+
+    testImplementation platform(libs.junit.bom)
+    testImplementation libs.junit.jupiter
+    testImplementation libs.assertj.core
+    testImplementation project(':protomolt-proto-sources')
+    testImplementation libs.protobuf.java.util
+    testRuntimeOnly libs.junit.platform.launcher
+}

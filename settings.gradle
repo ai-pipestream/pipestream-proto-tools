@@ -70,6 +70,8 @@ project(':protomolt-mapper-core').projectDir = file('mapper/core')
 
 include 'protomolt-mapper-cel'
 project(':protomolt-mapper-cel').projectDir = file('mapper/cel')
+include 'protomolt-shapes'
+project(':protomolt-shapes').projectDir = file('shapes')
 
 include 'protomolt-metadata'
 project(':protomolt-metadata').projectDir = file('mapper/metadata')

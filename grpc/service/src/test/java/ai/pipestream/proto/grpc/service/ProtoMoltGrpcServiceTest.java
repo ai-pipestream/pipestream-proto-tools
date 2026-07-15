@@ -82,10 +82,10 @@ class ProtoMoltGrpcServiceTest {
     }
 
     @Test
-    void schemaCompilesAndDeclaresFourteenRpcs() {
+    void schemaCompilesAndDeclaresSixteenRpcs() {
         assertThat(ProtoMoltServiceSchema.service().getFullName())
                 .isEqualTo("ai.pipestream.protomolt.v1.ProtoMoltService");
-        assertThat(ProtoMoltServiceSchema.service().getMethods()).hasSize(14);
+        assertThat(ProtoMoltServiceSchema.service().getMethods()).hasSize(16);
     }
 
     @Test
@@ -136,6 +136,28 @@ class ProtoMoltGrpcServiceTest {
         assertThat(result.path("$schema").asText()).contains("json-schema.org");
         assertThat(result.path("$defs").path("shop.v1.Order")
                 .path("properties").path("qty").path("type").asText()).isEqualTo("integer");
+    }
+
+    @Test
+    void joinMessagesSynthesizesAndJoinsThroughTheTypedSurface() throws Exception {
+        String orderProto = MAPPER.writeValueAsString(ORDER_PROTO);
+        JsonNode result = call("JoinMessages", """
+                {"sources": [
+                   {"name": "order", "schema": {"sources": {"shop/v1/order.proto": %s}},
+                    "type": "shop.v1.Order", "message": {"id": "o-1", "qty": 3}},
+                   {"name": "other", "schema": {"sources": {"shop/v1/order.proto": %s}},
+                    "type": "shop.v1.Order", "message": {"id": "o-2", "qty": 4}}
+                 ],
+                 "shape": {"mode": "projection", "name": "derived.v1.Pair",
+                           "fields": [{"name": "left_id", "from": "order.id"},
+                                      {"name": "right_id", "from": "other.id"}]},
+                 "celRules": [{"selector": "order.qty * other.qty", "target": "left_id"}]}
+                """.formatted(orderProto, orderProto));
+        assertThat(result.path("type").asText()).isEqualTo("derived.v1.Pair");
+        assertThat(result.path("message").path("leftId").asText()).isEqualTo("12");
+        assertThat(result.path("message").path("rightId").asText()).isEqualTo("o-2");
+        assertThat(result.path("protoSource").asText()).contains("string left_id = 1;");
+        assertThat(result.path("descriptorSetBase64").asText()).isNotEmpty();
     }
 
     @Test

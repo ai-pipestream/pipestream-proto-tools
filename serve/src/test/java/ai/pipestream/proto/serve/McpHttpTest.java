@@ -63,14 +63,14 @@ class McpHttpTest {
     }
 
     @Test
-    void toolsListServesTheFourteenVerbs() throws Exception {
+    void toolsListServesTheSixteenVerbs() throws Exception {
         HttpResponse<String> response = post("""
                 {"jsonrpc":"2.0","id":2,"method":"tools/list"}
                 """);
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode tools = MAPPER.readTree(response.body()).path("result").path("tools");
-        assertThat(tools.size()).isEqualTo(14);
-        assertThat(tools.findValuesAsText("name")).contains("reflect", "grpc-invoke", "generate-stubs");
+        assertThat(tools.size()).isEqualTo(16);
+        assertThat(tools.findValuesAsText("name")).contains("reflect", "grpc-invoke", "generate-stubs", "join-messages", "synthesize-shape");
     }
 
     @Test

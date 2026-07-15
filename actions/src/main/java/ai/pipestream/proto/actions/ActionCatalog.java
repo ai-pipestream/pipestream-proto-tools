@@ -34,6 +34,8 @@ public final class ActionCatalog {
         catalog.register(new RenderIndexMappingsAction());
         catalog.register(new EvalCelAction());
         catalog.register(new MapMessageAction());
+        catalog.register(new SynthesizeShapeAction());
+        catalog.register(new JoinMessagesAction());
         catalog.register(new ExtractMetadataAction());
         catalog.register(new ListTypesAction());
         return catalog;

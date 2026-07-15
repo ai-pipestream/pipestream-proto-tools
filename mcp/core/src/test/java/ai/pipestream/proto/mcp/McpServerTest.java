@@ -77,7 +77,7 @@ class McpServerTest {
     @Test
     void toolsListExposesEveryCatalogActionWithInputSchema() {
         JsonNode tools = respond(request(2, "tools/list", null)).get("result").get("tools");
-        assertThat(tools.size()).isEqualTo(10);
+        assertThat(tools.size()).isEqualTo(12);
         for (JsonNode tool : tools) {
             assertThat(tool.get("name").asText()).isNotEmpty();
             assertThat(tool.get("description").asText()).isNotEmpty();

@@ -33,6 +33,8 @@ repair strategies, which matters when the caller is a model.
 | `render-index-mappings` | OpenSearch mappings / Solr schema / Lucene field specs from indexing hints |
 | `eval-cel` | Evaluate a CEL expression against a message |
 | `map-message` | Apply text and CEL mapping rules to a message |
+| `synthesize-shape` | Derive a join/union output type (envelope, projection, or oneof union) from named sources; returns registrable proto source and implied rules |
+| `join-messages` | Join named source messages into an authored target or a synthesized shape with scoped rules and CEL |
 | `extract-metadata` | The declared metadata bag for a type |
 
 Wherever an action takes a schema it accepts exactly one of three forms —

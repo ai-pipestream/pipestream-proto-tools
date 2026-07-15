@@ -16,6 +16,7 @@ build-from-clone quick start. The guides here cover each subsystem in depth.
 | [MCP server](mcp.md) | The catalog as MCP tools and the registry as MCP resources; the gRPC agent workflow (reflect, invoke, generate); plain-Java stdio transport |
 | [The gRPC service](grpc-service.md) | The catalog as `ProtoMoltService` — typed RPCs served descriptor-natively with reflection; JSON/REST with OpenAPI and Swagger UI; the `protomolt-serve` launcher |
 | [Kafka Connect](kafka-connect.md) | The sink (topics drive gRPC methods), the source (server streams feed topics, resumable via CEL tokens), and protobuf-aware transforms (validate, map, CEL filter) |
+| [Joins and derived shapes](design/join-shapes.md) | Multi-source mapping scopes; envelope/projection/oneof output shapes; derived schemas as registry subjects; the shape verbs |
 | [Field mapping](mapping.md) | Text rule syntax; CEL filters, selectors, and environments |
 | [Validation](validation.md) | The rule surface; dialect SPI; protovalidate interoperability and conformance |
 | [Schema metadata](metadata.md) | Declared descriptor-option metadata; CEL-based runtime extraction |

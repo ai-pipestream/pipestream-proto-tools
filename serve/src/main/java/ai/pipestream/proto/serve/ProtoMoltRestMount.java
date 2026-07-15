@@ -23,13 +23,13 @@ public final class ProtoMoltRestMount {
     private ProtoMoltRestMount() {
     }
 
-    /** Mounts the thirteen verbs over {@code catalog} into {@code registry}, no token. */
+    /** Mounts every verb over {@code catalog} into {@code registry}, no token. */
     public static void register(ProtoRestMethodRegistry registry, ActionCatalog catalog) {
         register(registry, catalog, null);
     }
 
     /**
-     * Mounts the thirteen verbs over {@code catalog} into {@code registry}. A non-null
+     * Mounts every verb over {@code catalog} into {@code registry}. A non-null
      * {@code apiToken} requirement is attached to every method (enforced by the gateway's
      * validator and declared in the generated OpenAPI document).
      */

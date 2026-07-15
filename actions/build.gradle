@@ -12,6 +12,7 @@ dependencies {
     implementation project(':protomolt-jsonschema')
     implementation project(':protomolt-mapper-core')
     implementation project(':protomolt-mapper-cel')
+    implementation project(':protomolt-shapes')
     implementation project(':protomolt-index-spi')
     implementation project(':protomolt-index-lucene')
     implementation project(':protomolt-index-opensearch')

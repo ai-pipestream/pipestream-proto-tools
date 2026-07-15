@@ -53,6 +53,15 @@ service ProtoMoltService {
   // Extracts the declared metadata bag for a message type.
   rpc ExtractMetadata(ExtractMetadataRequest) returns (ExtractMetadataResponse);
 
+  // Synthesizes a join or union output shape — envelope, projection, or
+  // tagged union — from named source types, returning registrable proto
+  // source and the implied mapping rules.
+  rpc SynthesizeShape(SynthesizeShapeRequest) returns (SynthesizeShapeResponse);
+
+  // Joins named source messages into one output message: an authored target
+  // populated by scoped rules, or a shape synthesized on the fly.
+  rpc JoinMessages(JoinMessagesRequest) returns (JoinMessagesResponse);
+
   // Fetches a live gRPC server's schema over server reflection, given only
   // its address. Servers without reflection return ok=false.
   rpc Reflect(ReflectRequest) returns (ReflectResponse);
@@ -350,4 +359,80 @@ message GatherGitResponse {
   map<string, string> sources = 4;
   // Usable directly as SchemaSource.descriptor_set_base64.
   string descriptor_set_base64 = 5;
+}
+
+// A named source type (and, for joins, its message) in shape order; the
+// name becomes the scope name rules reference and the synthesized field or
+// case name.
+message ShapeSource {
+  string name = 1;
+  SchemaSource schema = 2;
+  // Fully qualified message type; required unless the schema identifies one.
+  string type = 3;
+  // join-messages only: the source message as proto3 JSON.
+  google.protobuf.Struct message = 4;
+}
+
+// A projected field: its type is inferred from the scoped source path.
+message ProjectedField {
+  string name = 1;
+  // e.g. 'order.ship_to.city'.
+  string from = 2;
+}
+
+message SynthesizeShapeRequest {
+  // 'envelope', 'projection', or 'union'.
+  string mode = 1;
+  // Fully qualified name of the synthesized message.
+  string name = 2;
+  repeated ShapeSource sources = 3;
+  // Projection only.
+  repeated ProjectedField fields = 4;
+}
+
+message SynthesizeShapeResponse {
+  string type = 1;
+  // Import path of the synthesized file.
+  string file = 2;
+  // Registrable proto source; imports carry the sources' true paths.
+  string proto_source = 3;
+  // Self-contained, dependency-ordered descriptor set.
+  string descriptor_set_base64 = 4;
+  // The rules the shape implies (projection and envelope).
+  repeated string implied_rules = 5;
+}
+
+// The authored output type of a join.
+message JoinTarget {
+  SchemaSource schema = 1;
+  string type = 2;
+}
+
+// A shape to synthesize as the join output.
+message JoinShape {
+  // 'envelope', 'projection', or 'union'.
+  string mode = 1;
+  string name = 2;
+  repeated ProjectedField fields = 3;
+}
+
+message JoinMessagesRequest {
+  repeated ShapeSource sources = 1;
+  // Exactly one of 'target' or 'shape'.
+  JoinTarget target = 2;
+  JoinShape shape = 3;
+  // Scoped text rules: 'target.path = source.path', '+=', '-clear'.
+  repeated string rules = 4;
+  // CEL rules applied after 'rules'; expressions see each source by name
+  // plus 'target', the progressive output.
+  repeated CelRule cel_rules = 5;
+}
+
+message JoinMessagesResponse {
+  string type = 1;
+  // The joined message as proto3 JSON.
+  google.protobuf.Struct message = 2;
+  // Present when the shape was synthesized.
+  string descriptor_set_base64 = 3;
+  string proto_source = 4;
 }

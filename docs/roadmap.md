@@ -178,7 +178,7 @@ Server (KServe v2 gRPC): server and model metadata introspected over
 MCP, tensor contracts and all.
 
 The catalog is now also a gRPC service of itself:
-`protomolt-grpc-service` defines all thirteen verbs as typed RPCs
+`protomolt-grpc-service` defines every verb as a typed RPC
 (`ai.pipestream.protomolt.v1.ProtoMoltService`), compiles that `.proto`
 with the runtime's own compiler at startup, and serves it over dynamic
 messages with server reflection on — grpcurl and ProtoMolt's own
@@ -206,6 +206,17 @@ compositions of gRPC calls (invoke, reshape with mapping rules and CEL,
 gate, validate, repeat) exposed as `run-chain`/`check-chain` verbs and
 versioned in the registry. A sidecar to whatever pipeline people already
 run, deliberately not a pipeline product.
+
+The first slice of the ETL story shipped alongside its design
+([joins and derived shapes](design/join-shapes.md)): `protomolt-shapes`
+synthesizes join/union output types at runtime — envelopes, projections
+whose field types are inferred from scoped source paths, and oneof tagged
+unions — emitted as registrable proto source with true import paths, and
+joins named messages through multi-source mapping scopes (text rules and
+CEL reading from every source at once). Exposed as the `synthesize-shape`
+and `join-messages` verbs on all surfaces. Planned next per the design:
+keyed joins over two gRPC server streams with bounded buffers, and a
+schema-declared key option.
 
 **5. A web console.** Every server host already serves `openapi.json`, and
 `MappingHelper` exists specifically to feed schema-browsing UIs. A bundled,

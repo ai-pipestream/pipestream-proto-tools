@@ -21,7 +21,7 @@ import java.nio.file.Path;
 
 /**
  * The one-process ProtoMolt server: {@code ProtoMoltService} over gRPC (reflection enabled),
- * the same thirteen verbs over JSON/REST with OpenAPI and Swagger UI, the MCP server on
+ * the same verbs over JSON/REST with OpenAPI and Swagger UI, the MCP server on
  * streamable HTTP at {@code /mcp} (with registry resources when a registry is mounted), and
  * optionally the git-backed schema registry speaking the Confluent protocol.
  *

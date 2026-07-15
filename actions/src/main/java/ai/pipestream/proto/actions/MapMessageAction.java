@@ -141,7 +141,7 @@ final class MapMessageAction implements ProtoAction {
         return output;
     }
 
-    private static List<CelMappingRule> parseCelRules(ArrayNode celRulesNode) throws ActionException {
+    static List<CelMappingRule> parseCelRules(ArrayNode celRulesNode) throws ActionException {
         if (celRulesNode == null) {
             return List.of();
         }
