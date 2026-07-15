@@ -8,3 +8,20 @@ dependencies {
 
     testImplementation project(':protomolt-proto-sources')
 }
+
+tasks.register('graphProbe', JavaExec) {
+    group = 'protomolt'
+    description = 'Probe what a Graph tenant allows: -Ptenant=... -Pclient=... [-Psecret=...] (see docs/msgraph.md)'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'ai.pipestream.proto.graph.GraphProbe'
+    doFirst {
+        def probeArgs = []
+        ['tenant', 'client', 'secret'].each { name ->
+            def value = findProperty(name)
+            if (value) {
+                probeArgs += ["--${name}".toString(), value.toString()]
+            }
+        }
+        args probeArgs
+    }
+}

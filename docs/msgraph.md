@@ -38,10 +38,10 @@ permissions actually allow — signed-in user, OneDrive, SharePoint sites,
 connectors — each as OK, permission-denied, or absent:
 
 ```shell
-java -cp ... ai.pipestream.proto.graph.GraphProbe \
-    --tenant <tenant-id> --client <app-id>          # device code, delegated
-java -cp ... ai.pipestream.proto.graph.GraphProbe \
-    --tenant <tenant-id> --client <app-id> --secret <secret>   # app-only
+# device code, delegated
+./gradlew -q :protomolt-msgraph:graphProbe -Ptenant=<tenant-id> -Pclient=<app-id>
+# app-only, client credentials
+./gradlew -q :protomolt-msgraph:graphProbe -Ptenant=<tenant-id> -Pclient=<app-id> -Psecret=<secret>
 ```
 
 A OneDrive-only license reports SharePoint as reachable with zero visible
