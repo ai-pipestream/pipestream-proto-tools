@@ -200,6 +200,13 @@ violation headers, reshape with mapping rules, filter by CEL predicate)
 drop into any Connect pipeline, and a plugin zip rides along with
 releases. See [Kafka Connect](kafka-connect.md).
 
+The next composition layer is designed but not yet built: the
+[chain manager](design/chain-manager.md) — configured, type-checked
+compositions of gRPC calls (invoke, reshape with mapping rules and CEL,
+gate, validate, repeat) exposed as `run-chain`/`check-chain` verbs and
+versioned in the registry. A sidecar to whatever pipeline people already
+run, deliberately not a pipeline product.
+
 **5. A web console.** Every server host already serves `openapi.json`, and
 `MappingHelper` exists specifically to feed schema-browsing UIs. A bundled,
 build-free console — schema browser, subject/version history, a try-it

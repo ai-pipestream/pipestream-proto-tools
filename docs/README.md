@@ -38,6 +38,9 @@ build-from-clone quick start. The guides here cover each subsystem in depth.
 ## Project direction
 
 - [Roadmap](roadmap.md) — toward a schema registry over Git and Maven
+- [Chain manager design](design/chain-manager.md) — typed, registered
+  compositions of gRPC calls: one endpoint in, one composed answer out; a
+  sidecar to existing pipelines, deliberately not a pipeline
 
 ## Records
 
