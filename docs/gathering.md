@@ -81,7 +81,10 @@ Three layout modes, mutually exclusive and checked in this priority order:
 - **Single subdir** (default) — one proto tree under `subdir`.
 
 Checkouts are cached persistently (default
-`~/.cache/protomolt/gather/git/<repo-hash>`, override with `cacheDir`): the
+`~/.cache/protomolt/gather/git/<repo-hash>`; override one repo's directory
+with `cacheDir`, or move every per-repo cache under an operator-chosen root
+with `cacheRoot` — `protomolt-serve` exposes the latter as `--gather-cache`
+/ `PROTOMOLT_GATHER_CACHE`): the
 first gather clones, later gathers fetch and hard-reset to the resolved ref.
 `offline(true)` uses the cache only and fails when it is cold; in online
 mode, a fetch failure over a warm cache logs a warning and falls back to the

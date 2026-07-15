@@ -38,19 +38,25 @@ public final class ProtoMoltServe implements AutoCloseable {
      * secret; documentation surfaces (health, OpenAPI, Swagger UI) stay open.
      */
     public record Options(String host, int grpcPort, int httpPort,
-                          Path registryGit, int registryPort, String apiToken, boolean demo) {
+                          Path registryGit, int registryPort, String apiToken, boolean demo,
+                          Path gatherCache) {
 
         public Options(String host, int grpcPort, int httpPort, Path registryGit, int registryPort) {
-            this(host, grpcPort, httpPort, registryGit, registryPort, null, false);
+            this(host, grpcPort, httpPort, registryGit, registryPort, null, false, null);
         }
 
         public Options(String host, int grpcPort, int httpPort, Path registryGit,
                        int registryPort, String apiToken) {
-            this(host, grpcPort, httpPort, registryGit, registryPort, apiToken, false);
+            this(host, grpcPort, httpPort, registryGit, registryPort, apiToken, false, null);
+        }
+
+        public Options(String host, int grpcPort, int httpPort, Path registryGit,
+                       int registryPort, String apiToken, boolean demo) {
+            this(host, grpcPort, httpPort, registryGit, registryPort, apiToken, demo, null);
         }
 
         public static Options defaults() {
-            return new Options("0.0.0.0", 9090, 8080, null, 8081, null, false);
+            return new Options("0.0.0.0", 9090, 8080, null, 8081, null, false, null);
         }
 
         static Options parse(String[] args) {
@@ -61,6 +67,10 @@ public final class ProtoMoltServe implements AutoCloseable {
             int registryPort = 8081;
             String apiToken = System.getenv("PROTOMOLT_API_TOKEN");
             boolean demo = false;
+            String gatherCacheEnv = System.getenv("PROTOMOLT_GATHER_CACHE");
+            Path gatherCache = gatherCacheEnv == null || gatherCacheEnv.isBlank()
+                    ? null
+                    : Path.of(gatherCacheEnv);
             for (int i = 0; i < args.length; i++) {
                 switch (args[i]) {
                     case "--host" -> host = requireValue(args, ++i);
@@ -69,11 +79,13 @@ public final class ProtoMoltServe implements AutoCloseable {
                     case "--registry-git" -> registryGit = Path.of(requireValue(args, ++i));
                     case "--registry-port" -> registryPort = Integer.parseInt(requireValue(args, ++i));
                     case "--api-token" -> apiToken = requireValue(args, ++i);
+                    case "--gather-cache" -> gatherCache = Path.of(requireValue(args, ++i));
                     case "--demo" -> demo = true;
                     case "--help", "-h" -> {
                         System.err.println("usage: protomolt-serve [--host <addr>] [--grpc-port <n>] "
                                 + "[--http-port <n>] [--registry-git <path> [--registry-port <n>]] "
-                                + "[--api-token <secret>]  (or PROTOMOLT_API_TOKEN) [--demo]");
+                                + "[--api-token <secret>]  (or PROTOMOLT_API_TOKEN) "
+                                + "[--gather-cache <dir>]  (or PROTOMOLT_GATHER_CACHE) [--demo]");
                         System.exit(0);
                     }
                     default -> {
@@ -85,7 +97,8 @@ public final class ProtoMoltServe implements AutoCloseable {
             if (apiToken != null && apiToken.isBlank()) {
                 apiToken = null;
             }
-            return new Options(host, grpcPort, httpPort, registryGit, registryPort, apiToken, demo);
+            return new Options(host, grpcPort, httpPort, registryGit, registryPort, apiToken,
+                    demo, gatherCache);
         }
 
         private static String requireValue(String[] args, int i) {
@@ -118,7 +131,7 @@ public final class ProtoMoltServe implements AutoCloseable {
     /** Starts every configured surface; closing stops them all. */
     public static ProtoMoltServe start(Options options) {
         ActionContext context = ActionContext.create();
-        ActionCatalog catalog = ProtoMoltCatalog.full(context);
+        ActionCatalog catalog = ProtoMoltCatalog.full(context, options.gatherCache());
 
         ProtoMoltGrpcServer grpc = null;
         JdkProtoRestServer http = null;

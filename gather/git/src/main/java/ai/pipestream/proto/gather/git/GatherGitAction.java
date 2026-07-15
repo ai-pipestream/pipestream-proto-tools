@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -23,6 +24,22 @@ import java.util.List;
  * reflection.
  */
 public final class GatherGitAction implements ProtoAction {
+
+    private final Path cacheRoot;
+
+    /** Clone caches under the library default ({@code ~/.cache/protomolt/gather/git}). */
+    public GatherGitAction() {
+        this(null);
+    }
+
+    /**
+     * Clone caches under {@code cacheRoot} (plus the standard per-repo hash) — the
+     * operator's choice of disk location, never the caller's: cache placement is server
+     * configuration, not request input.
+     */
+    public GatherGitAction(Path cacheRoot) {
+        this.cacheRoot = cacheRoot;
+    }
 
     @Override
     public String name() {
@@ -75,6 +92,9 @@ public final class GatherGitAction implements ProtoAction {
         }
         GitProtoGatherer.Builder builder = GitProtoGatherer.builder()
                 .repo(repoNode.asText());
+        if (cacheRoot != null) {
+            builder.cacheRoot(cacheRoot);
+        }
         JsonNode ref = input.get("ref");
         if (ref != null && ref.isTextual() && !ref.asText().isBlank()) {
             builder.ref(ref.asText());

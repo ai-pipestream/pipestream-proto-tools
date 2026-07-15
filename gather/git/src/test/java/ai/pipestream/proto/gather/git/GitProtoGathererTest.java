@@ -261,6 +261,26 @@ class GitProtoGathererTest {
     }
 
     @Test
+    void cacheRootPlacesPerRepoCachesUnderTheOperatorsDirectory() throws Exception {
+        String url = initUpstream();
+        writeUpstream("proto/common/v1/id.proto", COMMON_PROTO);
+        commitAll("initial");
+        Path root = tempDir.resolve("operator-cache");
+
+        ProtoSourceSet set = GitProtoGatherer.builder()
+                .repo(url)
+                .cacheRoot(root)
+                .build()
+                .gather();
+
+        assertThat(set.paths()).containsExactly("common/v1/id.proto");
+        try (var children = Files.list(root)) {
+            // One per-repo hash directory under the operator's root; nothing under $HOME.
+            assertThat(children.filter(Files::isDirectory).toList()).hasSize(1);
+        }
+    }
+
+    @Test
     void cacheIsReusedAndFetchSeesUpstreamChanges() throws Exception {
         String url = initUpstream();
         writeUpstream("proto/common/v1/id.proto", COMMON_PROTO);

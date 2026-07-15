@@ -58,8 +58,12 @@ public final class GitProtoGatherer implements ProtoGatherer {
         this.modules = List.copyOf(builder.modules);
         this.paths = List.copyOf(builder.paths);
         this.credentials = credentials(builder.token, builder.username, builder.password);
-        this.cacheDir = (builder.cacheDir != null ? builder.cacheDir : defaultCacheDir(builder.repo))
-                .toAbsolutePath().normalize();
+        Path cacheDir = builder.cacheDir != null
+                ? builder.cacheDir
+                : builder.cacheRoot != null
+                        ? builder.cacheRoot.resolve(sha256Prefix(builder.repo))
+                        : defaultCacheDir(builder.repo);
+        this.cacheDir = cacheDir.toAbsolutePath().normalize();
         this.offline = builder.offline;
     }
 
@@ -219,6 +223,7 @@ public final class GitProtoGatherer implements ProtoGatherer {
         private String username;
         private String password;
         private Path cacheDir;
+        private Path cacheRoot;
         private boolean offline = false;
 
         private Builder() {
@@ -273,6 +278,16 @@ public final class GitProtoGatherer implements ProtoGatherer {
         /** Overrides the persistent clone cache directory. */
         public Builder cacheDir(Path cacheDir) {
             this.cacheDir = Objects.requireNonNull(cacheDir, "cacheDir");
+            return this;
+        }
+
+        /**
+         * Overrides where per-repo clone caches live: this directory plus the standard
+         * per-repo hash, instead of {@code ${user.home}/.cache/protomolt/gather/git}.
+         * The operator-level knob; {@link #cacheDir} pins one exact directory instead.
+         */
+        public Builder cacheRoot(Path cacheRoot) {
+            this.cacheRoot = Objects.requireNonNull(cacheRoot, "cacheRoot");
             return this;
         }
 

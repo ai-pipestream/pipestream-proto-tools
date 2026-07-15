@@ -39,6 +39,12 @@ try (var server = ProtoMoltGrpcServer.start(9090, catalog)) {
 
 ## Running everything: protomolt-serve
 
+Operator flags cover every disk location the server may touch:
+`--registry-git` for the registry's Git repository and `--gather-cache`
+(or `PROTOMOLT_GATHER_CACHE`) for `gather-git`'s clone caches — cache
+placement is server configuration, never request input. Nothing else
+writes to disk.
+
 When the console has been built (`cd console && npm ci && npm run build`)
 before `protomolt-serve`, its bundle rides inside the jar and is served at
 `/console` — the schema-registry browser, type explorer, and

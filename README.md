@@ -179,10 +179,13 @@ skip automatically when no registry is reachable; see
 ## Runtime disk footprint
 
 ProtoMolt never writes message data to disk. The only runtime writes are
-declared schema storage: the registry's Git repository (the `--registry-git`
-path you choose, or a temporary directory in `--demo` mode) and
-`gather-git`'s persistent clone cache. Everything else — compilation of
-`.proto` text to descriptors included — runs entirely in memory.
+declared schema storage, at locations the operator chooses: the registry's
+Git repository (`--registry-git`, or a temporary directory in `--demo`
+mode) and `gather-git`'s persistent clone cache (`--gather-cache` /
+`PROTOMOLT_GATHER_CACHE`, defaulting to `~/.cache/protomolt/gather/git`).
+Cache placement is server configuration, never request input. Everything
+else — compilation of `.proto` text to descriptors included — runs
+entirely in memory.
 
 ## Naming
 
