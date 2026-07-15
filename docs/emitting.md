@@ -96,10 +96,16 @@ unsigned 32-bit values widen to `int64` so no value changes sign. Recursive
 message types cannot exist in a columnar schema and are rejected with the
 cycle named.
 
-The module depends on `parquet-hadoop` plus the Hadoop *API* jar only; it
-never instantiates a Hadoop `Configuration`, so no Hadoop runtime, native
-libraries, or filesystem come along. It is deliberately a leaf module —
-depend on it only where Parquet output is wanted.
+The module depends on `parquet-hadoop` and `snappy-java` — and **zero Hadoop
+jars**. Hadoop types appear only in `parquet-hadoop` method signatures
+(compile-time), never at run time: the emitter supplies its own snappy-java
+codec factory, so parquet's default `CodecFactory` (which materializes a
+Hadoop `Configuration` and with it the 19 MB client-api jar plus the 34 MB
+client runtime) is never touched. This is not an aspiration but a test:
+`HadoopFreeParquetTest` runs the writer inside a classloader with every
+Hadoop jar removed, so any regression fails naming the offending class. The
+module is deliberately a leaf — depend on it only where Parquet output is
+wanted.
 
 There is intentionally no `emit-parquet` verb: Parquet output is message
 data, and this surface keeps message data out of server-side destination

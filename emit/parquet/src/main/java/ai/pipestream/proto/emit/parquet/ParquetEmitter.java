@@ -36,8 +36,11 @@ public final class ParquetEmitter {
         try (ParquetWriter<Message> writer = new Builder(output,
                 new ProtoParquetWriteSupport(descriptor))
                 .withCompressionCodec(CompressionCodecName.SNAPPY)
-                // The non-Hadoop configuration: this module never instantiates a Hadoop
-                // Configuration, so the heavyweight client runtime stays off the classpath.
+                // The non-Hadoop path, both halves: PlainParquetConfiguration keeps our
+                // write support off Hadoop, and the codec factory keeps parquet's own
+                // CodecFactory (which materializes a Hadoop Configuration) out of the
+                // picture. Net effect: zero Hadoop classes load at run time.
+                .withCodecFactory(new HadoopFreeCodecs())
                 .withConf(new org.apache.parquet.conf.PlainParquetConfiguration())
                 .build()) {
             for (Message message : messages) {
