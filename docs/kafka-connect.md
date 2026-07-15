@@ -189,3 +189,10 @@ true — and JSON values come back as the same Java type they arrived as.
 decoded message is true and drops the rest. `on.error` decides what an
 undecodable value or a runtime evaluation failure does: `fail` (default),
 `keep`, or `drop`.
+
+**`RedactMessage`** masks record values by their schema-declared
+sensitivity classes (`ai.pipestream.proto.meta.v1.field.sensitivity`):
+declare `pii` once in the proto and every topic this transform touches
+honors it — `classes` (default `pii`) picks what to mask, `strategy`
+picks `remove` or `redact` (strings become `***`). Recursion covers
+nested and repeated messages.

@@ -1,5 +1,6 @@
 package ai.pipestream.proto.kafka.connect;
 
+import ai.pipestream.proto.meta.DescriptorMetadata;
 import ai.pipestream.proto.validate.ValidationResult;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FileDescriptorSet;
@@ -53,6 +54,7 @@ final class GrpcConnectorSupport {
         try {
             ExtensionRegistry extensions = ExtensionRegistry.newInstance();
             ValidationResult.registerExtensions(extensions);
+            DescriptorMetadata.registerExtensions(extensions);
             set = FileDescriptorSet.parseFrom(
                     Base64.getDecoder().decode(descriptorSetBase64), extensions);
         } catch (Exception e) {

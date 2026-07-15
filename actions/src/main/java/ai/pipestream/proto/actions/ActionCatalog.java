@@ -38,6 +38,8 @@ public final class ActionCatalog {
         catalog.register(new JoinMessagesAction());
         catalog.register(new MergeSchemasAction());
         catalog.register(new CheckRulesAction());
+        catalog.register(new InferSchemaAction());
+        catalog.register(new MaskMessageAction());
         catalog.register(new ExtractMetadataAction());
         catalog.register(new ListTypesAction());
         return catalog;

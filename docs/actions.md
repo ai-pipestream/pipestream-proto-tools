@@ -39,6 +39,8 @@ repair strategies, which matters when the caller is a model.
 | `check-rules` | Statically validate mapping rules and CEL (filters must be bool) against descriptors; sample messages upgrade the check to a dry run |
 | `run-chain` | Execute an inline chain: serial unary gRPC calls, each request mapped from the chain input and prior steps' responses |
 | `check-chain` | Verify a chain without running it: methods, step scopes, gates, and every mapping type-checked |
+| `infer-schema` | Struct-to-proto: reverse-engineer a message type from JSON sample documents; returns registrable source + descriptor set |
+| `mask-message` | Mask fields by their schema-declared sensitivity classes (remove or redact), recursively |
 | `extract-metadata` | The declared metadata bag for a type |
 
 Wherever an action takes a schema it accepts exactly one of three forms —

@@ -1,10 +1,11 @@
 # The chain manager (design)
 
-Status: phase 1 implemented (`protomolt-chain`: the runner, the verifier,
-and the `run-chain`/`check-chain` verbs — inline chains, serial unary,
-fail-fast, nested deadlines, `when` gates, response validation). Phases 2+
-(named chains in the registry, terminal streaming steps, retries,
-compensation) remain design.
+Status: phases 1 and 2 implemented (`protomolt-chain`: the runner, the
+verifier, and the `run-chain`/`check-chain` verbs — inline chains, serial
+unary, fail-fast, nested deadlines, `when` gates, response validation;
+named chains stored in the registry under `chains/` with `check-chain` as
+the write gate, resolved by `run-chain`'s `chainName`). Terminal streaming
+steps, retries, and compensation remain design.
 
 ## What it is
 

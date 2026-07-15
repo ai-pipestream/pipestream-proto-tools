@@ -394,6 +394,10 @@ public class TypeConverter {
             case STRING:
                 return value.toString();
             case MESSAGE:
+                Object aligned = alignMessage(value, field);
+                if (aligned != null) {
+                    return aligned;
+                }
                 if (value instanceof Struct &&
                     !field.getMessageType().getFullName().equals(Struct.getDescriptor().getFullName())) {
                     return structToMessage((Struct) value, field.getMessageType());
@@ -423,8 +427,46 @@ public class TypeConverter {
             case STRING -> value instanceof String;
             case BYTE_STRING -> value instanceof ByteString;
             case ENUM -> value instanceof EnumValueDescriptor;
-            case MESSAGE -> value instanceof Message;
+            // Descriptor INSTANCES must match: the same type compiled twice (generated
+            // versus runtime) is wire-identical but rejected by setField, so those go
+            // through alignMessage instead of passing as-is.
+            case MESSAGE -> value instanceof Message message
+                    && message.getDescriptorForType() == field.getMessageType();
             default -> false;
         };
+    }
+
+    /**
+     * Message-typed conversions the wire format guarantees: the same full name under a
+     * different descriptor instance re-parses from bytes, and a scalar landing on a
+     * {@code google.protobuf.Value} field wraps.
+     */
+    private Object alignMessage(Object value, FieldDescriptor field) {
+        String target = field.getMessageType().getFullName();
+        Message candidate = null;
+        if (value instanceof Message message) {
+            candidate = message;
+        } else if (target.equals(Value.getDescriptor().getFullName())) {
+            if (value instanceof String text) {
+                candidate = Value.newBuilder().setStringValue(text).build();
+            } else if (value instanceof Number number) {
+                candidate = Value.newBuilder().setNumberValue(number.doubleValue()).build();
+            } else if (value instanceof Boolean bool) {
+                candidate = Value.newBuilder().setBoolValue(bool).build();
+            }
+        }
+        if (candidate == null
+                || !candidate.getDescriptorForType().getFullName().equals(target)) {
+            return null;
+        }
+        if (candidate.getDescriptorForType() == field.getMessageType()) {
+            return candidate;
+        }
+        try {
+            return DynamicMessage.parseFrom(field.getMessageType(), candidate.toByteString());
+        } catch (InvalidProtocolBufferException e) {
+            throw new IllegalArgumentException(
+                    "Failed to align " + target + " across descriptor instances", e);
+        }
     }
 }

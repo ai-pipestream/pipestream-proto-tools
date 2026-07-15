@@ -56,6 +56,7 @@ public final class GitSchemaRegistryStore implements SchemaRegistryStore {
     private static final ConcurrentMap<Path, ReentrantLock> JVM_LOCKS = new ConcurrentHashMap<>();
 
     private static final String SUBJECTS_DIR = "subjects";
+    private static final String CHAINS_DIR = "chains";
     private static final String REGISTRY_FILE = "registry.json";
     private static final String LOCK_FILE = "registry.lock";
     private static final String CONFIG_FILE = "config.json";
@@ -212,6 +213,60 @@ public final class GitSchemaRegistryStore implements SchemaRegistryStore {
             index = null;
             return stored;
         });
+    }
+
+    /**
+     * Stores a named chain definition (an opaque JSON document to this store), one commit
+     * per put under {@code chains/<name>.json}. The registry server gates writes with
+     * {@code check-chain}; the store only persists and versions via Git history.
+     */
+    public void putChain(String name, String chainJson) throws RegistryStoreException {
+        requireChainName(name);
+        Objects.requireNonNull(chainJson, "chainJson");
+        locked(() -> {
+            String path = CHAINS_DIR + "/" + encode(name) + ".json";
+            Files.createDirectories(repoDir.resolve(CHAINS_DIR));
+            Files.writeString(repoDir.resolve(path), chainJson);
+            commit(List.of(path), "Put chain " + name);
+            return null;
+        });
+    }
+
+    /** The named chain's JSON document, when present. */
+    public Optional<String> chain(String name) throws RegistryStoreException {
+        requireChainName(name);
+        Path path = repoDir.resolve(CHAINS_DIR).resolve(encode(name) + ".json");
+        try {
+            return Files.isRegularFile(path)
+                    ? Optional.of(Files.readString(path))
+                    : Optional.empty();
+        } catch (IOException e) {
+            throw new RegistryStoreException("Failed to read chain " + name, e);
+        }
+    }
+
+    /** Every stored chain name, sorted. */
+    public List<String> chains() throws RegistryStoreException {
+        Path dir = repoDir.resolve(CHAINS_DIR);
+        if (!Files.isDirectory(dir)) {
+            return List.of();
+        }
+        try (var files = Files.list(dir)) {
+            return files.map(path -> path.getFileName().toString())
+                    .filter(fileName -> fileName.endsWith(".json"))
+                    .map(fileName -> decode(fileName.substring(0, fileName.length() - 5)))
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            throw new RegistryStoreException("Failed to list chains", e);
+        }
+    }
+
+    private static void requireChainName(String name) {
+        if (name == null || name.isBlank() || !name.matches("[A-Za-z0-9._-]+")) {
+            throw new IllegalArgumentException(
+                    "Chain names use [A-Za-z0-9._-]; got '" + name + "'");
+        }
     }
 
     @Override
@@ -385,6 +440,10 @@ public final class GitSchemaRegistryStore implements SchemaRegistryStore {
 
     private static String encode(String subject) {
         return URLEncoder.encode(subject, StandardCharsets.UTF_8);
+    }
+
+    private static String decode(String encoded) {
+        return java.net.URLDecoder.decode(encoded, StandardCharsets.UTF_8);
     }
 
     // ---------------------------------------------------------------- builder

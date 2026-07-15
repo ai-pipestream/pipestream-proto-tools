@@ -9,6 +9,7 @@ dependencies {
     implementation project(':protomolt-json')
     implementation project(':protomolt-mapper-cel')
     implementation project(':protomolt-protobuf-validation')
+    implementation project(':protomolt-protobuf-metadata')
     implementation libs.protobuf.java.util
 
     runtimeOnly libs.grpc.netty.shaded

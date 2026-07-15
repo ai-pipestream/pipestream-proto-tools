@@ -55,6 +55,9 @@ including the protocol's quirks (`compatibility` in PUT bodies,
 `compatibilityLevel` in GET responses), verified against Confluent's error
 codes. Two native endpoints go beyond the protocol:
 
+- `GET/PUT /protomolt/chains/{name}` and `GET /protomolt/chains` — named
+  chain definitions, versioned by Git commits, with `check-chain` as the
+  write gate when the action catalog is mounted
 - `GET /protomolt/subjects/{subject}/descriptor-set` — the subject's latest
   version and its transitive references compiled to a binary
   `FileDescriptorSet`. This is the gRPC path: build-time consumers, runtime

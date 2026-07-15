@@ -1,8 +1,9 @@
 # Joins, unions, and derived shapes (design)
 
-Status: design settled; phase 1 (multi-source resolution, shape synthesis,
-the `synthesize-shape`, `join-messages`, and `merge-schemas` verbs) is
-implemented.
+Status: design settled; implemented through stream joins — multi-source
+resolution, shape synthesis, `synthesize-shape` / `join-messages` /
+`merge-schemas` / `infer-schema` (struct-to-proto: reverse-engineer a
+message type from data-rich JSON samples), and `StreamJoiner`.
 
 ## Motivation
 
@@ -147,8 +148,12 @@ alongside the stream-join phase.
    scoped mapper, synthesizer (envelope, projection, tagged union),
    joiner — plus the `synthesize-shape` / `join-messages` verbs on every
    surface.
-2. **Stream joins**: zip and keyed joins over two `DynamicGrpcStream`s
-   with bounded buffers; a Connect source that emits a joined stream.
+2. **Stream joins** (implemented): `StreamJoiner` — zip and keyed joins
+   over two flow-controlled `DynamicGrpcStream`s, matched symmetrically
+   (each arrival probes the other side's buffer immediately), bounded
+   per-side buffers dropping oldest on overflow, output built through the
+   standard scoped rules. A Connect source emitting a joined stream
+   remains open.
 3. **Schema-declared keys**: the metadata option and its adoption by
    stream joins and the connectors.
 4. **Registry registration of derived shapes** as a first-class flow

@@ -81,6 +81,60 @@ class DynamicMessageStructTest {
     }
 
     @Test
+    void wholeMessagesCopyAcrossSeparatelyCompiledSchemas() throws Exception {
+        // The same file compiled twice yields wire-identical types under DIFFERENT
+        // descriptor instances; a whole-message copy must align via bytes, not fail.
+        var again = new ProtoSourceCompiler().compile(ProtoSourceSet.builder()
+                .add("probe/order.proto", """
+                        syntax = "proto3";
+                        package probe;
+                        import "google/protobuf/struct.proto";
+                        message Order {
+                          string id = 1;
+                          google.protobuf.Struct extras = 2;
+                          Address ship_to = 3;
+                        }
+                        message Address {
+                          string city = 1;
+                        }
+                        """, "probe").build());
+        Descriptor otherOrder = again.descriptorFor("probe/order.proto").orElseThrow()
+                .findMessageTypeByName("Order");
+        Descriptor otherAddress = again.descriptorFor("probe/order.proto").orElseThrow()
+                .findMessageTypeByName("Address");
+        assertThat(otherAddress).isNotSameAs(order.findFieldByName("ship_to").getMessageType());
+
+        DynamicMessage foreignAddress = DynamicMessage.newBuilder(otherAddress)
+                .setField(otherAddress.findFieldByName("city"), "Shelbyville").build();
+        ProtoFieldMapperImpl mapper = new ProtoFieldMapperImpl(DescriptorRegistry.create());
+        var builder = order("o-4");
+        mapper.setValue(builder, "ship_to", foreignAddress);
+        assertThat(mapper.getValue(builder.build(), "ship_to.city")).isEqualTo("Shelbyville");
+    }
+
+    @Test
+    void scalarsWrapOntoValueTypedFields() throws Exception {
+        var compiled = new ProtoSourceCompiler().compile(ProtoSourceSet.builder()
+                .add("probe/holder.proto", """
+                        syntax = "proto3";
+                        package probe;
+                        import "google/protobuf/struct.proto";
+                        message Holder {
+                          google.protobuf.Value anything = 1;
+                        }
+                        """, "probe").build());
+        Descriptor holder = compiled.descriptorFor("probe/holder.proto").orElseThrow()
+                .findMessageTypeByName("Holder");
+        ProtoFieldMapperImpl mapper = new ProtoFieldMapperImpl(DescriptorRegistry.create());
+        var builder = DynamicMessage.newBuilder(holder);
+        mapper.setValue(builder, "anything", "hello");
+        DynamicMessage anything = (DynamicMessage) builder.build()
+                .getField(holder.findFieldByName("anything"));
+        assertThat(anything.getField(anything.getDescriptorForType()
+                .findFieldByName("string_value"))).isEqualTo("hello");
+    }
+
+    @Test
     void structListsAppendOnDynamicMessages() throws Exception {
         ProtoFieldMapperImpl mapper = new ProtoFieldMapperImpl(DescriptorRegistry.create());
         var builder = order("o-3");

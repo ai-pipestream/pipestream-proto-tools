@@ -131,7 +131,6 @@ public final class ProtoMoltServe implements AutoCloseable {
     /** Starts every configured surface; closing stops them all. */
     public static ProtoMoltServe start(Options options) {
         ActionContext context = ActionContext.create();
-        ActionCatalog catalog = ProtoMoltCatalog.full(context, options.gatherCache());
 
         ProtoMoltGrpcServer grpc = null;
         JdkProtoRestServer http = null;
@@ -152,6 +151,9 @@ public final class ProtoMoltServe implements AutoCloseable {
                         .repositoryDir(registryGit)
                         .build();
             }
+            // The catalog sees the store so run-chain resolves stored chain names.
+            ActionCatalog catalog = ProtoMoltCatalog.full(context, options.gatherCache(),
+                    store == null ? null : chainRepository(store));
             if (options.demo()) {
                 DemoSchemas.seed(context.registry(), store);
             }
@@ -213,6 +215,27 @@ public final class ProtoMoltServe implements AutoCloseable {
             closeQuietly(store);
             throw e;
         }
+    }
+
+    private static ai.pipestream.proto.chain.ChainRepository chainRepository(
+            GitSchemaRegistryStore store) {
+        com.fasterxml.jackson.databind.ObjectMapper json =
+                new com.fasterxml.jackson.databind.ObjectMapper();
+        return name -> {
+            try {
+                return store.chain(name).map(text -> {
+                    try {
+                        var node = json.readTree(text);
+                        return node instanceof com.fasterxml.jackson.databind.node.ObjectNode chain
+                                ? chain : null;
+                    } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                        return null;
+                    }
+                });
+            } catch (Exception e) {
+                return java.util.Optional.empty();
+            }
+        };
     }
 
     private static void closeQuietly(AutoCloseable closeable) {

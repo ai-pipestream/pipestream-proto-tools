@@ -227,6 +227,13 @@ public final class ShapeSynthesizer {
         return field;
     }
 
+    /** Links a fully-authored message proto (nested types included) as a shape. */
+    SynthesizedShape linkSynthetic(String fullName, DescriptorProto.Builder message,
+                                   List<FileDescriptor> dependencies,
+                                   List<String> impliedRules) {
+        return link(fullName, message, dependencies, impliedRules);
+    }
+
     private SynthesizedShape link(String fullName, DescriptorProto.Builder message,
                                   List<FileDescriptor> dependencies,
                                   List<String> impliedRules) {
@@ -267,25 +274,39 @@ public final class ShapeSynthesizer {
         if (file.getDependencyCount() > 0) {
             out.append('\n');
         }
-        out.append("message ").append(type.getName()).append(" {\n");
+        emitMessage(out, type, "");
+        return out.toString();
+    }
+
+    private static void emitMessage(StringBuilder out, Descriptor type, String indent) {
+        out.append(indent).append("message ").append(type.getName()).append(" {\n");
+        for (Descriptor nested : type.getNestedTypes()) {
+            emitMessage(out, nested, indent + "  ");
+        }
         boolean oneof = !type.getOneofs().isEmpty();
         if (oneof) {
-            out.append("  oneof ").append(type.getOneofs().get(0).getName()).append(" {\n");
+            out.append(indent).append("  oneof ")
+                    .append(type.getOneofs().get(0).getName()).append(" {\n");
         }
-        String indent = oneof ? "    " : "  ";
+        String fieldIndent = indent + (oneof ? "    " : "  ");
         for (FieldDescriptor field : type.getFields()) {
-            out.append(indent);
+            out.append(fieldIndent);
             if (field.isRepeated()) {
                 out.append("repeated ");
             }
             out.append(typeKeyword(field)).append(' ').append(field.getName())
-                    .append(" = ").append(field.getNumber()).append(";\n");
+                    .append(" = ").append(field.getNumber());
+            // json_name is set only when a sanitized name must round-trip the original.
+            if (field.toProto().hasJsonName()) {
+                out.append(" [json_name = \"")
+                        .append(field.toProto().getJsonName()).append("\"]");
+            }
+            out.append(";\n");
         }
         if (oneof) {
-            out.append("  }\n");
+            out.append(indent).append("  }\n");
         }
-        out.append("}\n");
-        return out.toString();
+        out.append(indent).append("}\n");
     }
 
     /** The proto keyword or full type name a field declares — also used in clash reports. */

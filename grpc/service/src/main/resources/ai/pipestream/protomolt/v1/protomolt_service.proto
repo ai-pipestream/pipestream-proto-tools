@@ -71,6 +71,14 @@ service ProtoMoltService {
   // boolean) against descriptors; with sample messages, also dry-runs them.
   rpc CheckRules(CheckRulesRequest) returns (CheckRulesResponse);
 
+  // Struct-to-proto: infers a message type from JSON sample documents and
+  // returns registrable proto source plus the linked descriptor set.
+  rpc InferSchema(InferSchemaRequest) returns (InferSchemaResponse);
+
+  // Masks fields by their schema-declared sensitivity classes
+  // (ai.pipestream.proto.meta.v1.field.sensitivity).
+  rpc MaskMessage(MaskMessageRequest) returns (MaskMessageResponse);
+
   // Executes an inline chain: serial typed gRPC calls, each request mapped
   // from the chain input and every prior step's response.
   rpc RunChain(RunChainRequest) returns (RunChainResponse);
@@ -591,6 +599,9 @@ message RunChainRequest {
   ChainDefinition chain = 1;
   // The chain input, as proto3 JSON of input_type.
   google.protobuf.Struct input = 2;
+  // A stored chain to run instead of an inline 'chain' (registered via the
+  // registry's chains endpoint).
+  string chain_name = 3;
 }
 
 message ChainStepResult {
@@ -624,4 +635,35 @@ message ChainFinding {
 message CheckChainResponse {
   bool ok = 1;
   repeated ChainFinding findings = 2;
+}
+
+message InferSchemaRequest {
+  // Fully qualified name for the inferred message.
+  string name = 1;
+  // Sample documents; keys union across samples and numbers stay int64 only
+  // when integral in every occurrence.
+  repeated google.protobuf.Struct samples = 2;
+}
+
+message InferSchemaResponse {
+  string type = 1;
+  string file = 2;
+  // Registrable proto source (json_name preserves sanitized keys).
+  string proto_source = 3;
+  string descriptor_set_base64 = 4;
+}
+
+message MaskMessageRequest {
+  SchemaSource schema = 1;
+  string type = 2;
+  google.protobuf.Struct message = 3;
+  // Sensitivity classes to mask, e.g. 'pii'.
+  repeated string classes = 4;
+  // 'remove' (default) or 'redact'.
+  string strategy = 5;
+}
+
+message MaskMessageResponse {
+  google.protobuf.Struct message = 1;
+  repeated string masked_fields = 2;
 }

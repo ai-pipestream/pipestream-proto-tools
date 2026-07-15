@@ -1,6 +1,7 @@
 package ai.pipestream.proto.registry.server;
 
 import ai.pipestream.proto.actions.ActionCatalog;
+import ai.pipestream.proto.registry.GitSchemaRegistryStore;
 import ai.pipestream.proto.actions.ActionException;
 import ai.pipestream.proto.registry.CompatibilityModes;
 import ai.pipestream.proto.registry.IncompatibleRegistrationException;
@@ -207,6 +208,16 @@ public final class SchemaRegistryServer implements AutoCloseable {
         } else if (segments.size() == 4 && segments.get(0).equals(nativePrefix)
                 && segments.get(1).equals("subjects") && segments.get(3).equals("descriptor-set")) {
             requireMethod(exchange, method, "GET", () -> descriptorSet(exchange, segments.get(2)));
+        } else if (segments.size() == 2 && segments.get(0).equals(nativePrefix)
+                && segments.get(1).equals("chains")) {
+            requireMethod(exchange, method, "GET", () -> listChains(exchange));
+        } else if (segments.size() == 3 && segments.get(0).equals(nativePrefix)
+                && segments.get(1).equals("chains")) {
+            switch (method) {
+                case "GET" -> getChain(exchange, segments.get(2));
+                case "PUT" -> putChain(exchange, segments.get(2));
+                default -> methodNotAllowed(exchange, "GET, PUT");
+            }
         } else if (actions != null && segments.size() == 2 && segments.get(0).equals(nativePrefix)
                 && segments.get(1).equals("actions")) {
             requireMethod(exchange, method, "GET",
@@ -391,6 +402,80 @@ public final class SchemaRegistryServer implements AutoCloseable {
     }
 
     // ---------------------------------------------------------------- native extras
+
+    private void listChains(HttpExchange exchange) throws IOException {
+        if (!(store instanceof GitSchemaRegistryStore gitStore)) {
+            writeError(exchange, 404, 40401, "This store does not hold chains");
+            return;
+        }
+        try {
+            writeJson(exchange, 200, json.valueToTree(gitStore.chains()));
+        } catch (Exception e) {
+            writeError(exchange, 500, 50001, "Failed to list chains: " + e.getMessage());
+        }
+    }
+
+    private void getChain(HttpExchange exchange, String name) throws IOException {
+        if (!(store instanceof GitSchemaRegistryStore gitStore)) {
+            writeError(exchange, 404, 40401, "This store does not hold chains");
+            return;
+        }
+        try {
+            var chain = gitStore.chain(name);
+            if (chain.isEmpty()) {
+                writeError(exchange, 404, 40401, "Chain not found: " + name);
+                return;
+            }
+            byte[] body = chain.get().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+        } catch (Exception e) {
+            writeError(exchange, 500, 50001, "Failed to read chain: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Stores a chain, gated the way schema writes are compatibility-gated: when the action
+     * catalog is mounted, {@code check-chain} must pass before anything is committed.
+     */
+    private void putChain(HttpExchange exchange, String name) throws IOException {
+        if (!(store instanceof GitSchemaRegistryStore gitStore)) {
+            writeError(exchange, 404, 40401, "This store does not hold chains");
+            return;
+        }
+        JsonNode body = readJsonBody(exchange);
+        if (!(body instanceof ObjectNode chain)) {
+            writeError(exchange, 422, 42201, "The body must be a chain definition object");
+            return;
+        }
+        if (actions != null) {
+            try {
+                ObjectNode request = json.createObjectNode();
+                request.set("chain", chain);
+                ObjectNode checked = actions.execute("check-chain", request);
+                if (!checked.path("ok").asBoolean()) {
+                    ObjectNode error = json.createObjectNode();
+                    error.put("error_code", 42202);
+                    error.put("message", "Chain does not verify");
+                    error.set("findings", checked.get("findings"));
+                    writeJson(exchange, 422, error);
+                    return;
+                }
+            } catch (ActionException e) {
+                writeError(exchange, 422, 42202, "Chain does not verify: " + e.getMessage());
+                return;
+            }
+        }
+        try {
+            gitStore.putChain(name, chain.toString());
+            writeJson(exchange, 200, json.createObjectNode().put("name", name));
+        } catch (IllegalArgumentException e) {
+            writeError(exchange, 422, 42201, e.getMessage());
+        } catch (Exception e) {
+            writeError(exchange, 500, 50001, "Failed to store chain: " + e.getMessage());
+        }
+    }
 
     private void descriptorSet(HttpExchange exchange, String subject) throws IOException {
         Optional<StoredSchema> latest = store.latest(subject);

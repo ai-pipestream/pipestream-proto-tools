@@ -21,14 +21,21 @@ import java.util.List;
 public final class RunChainAction implements ProtoAction {
 
     private final ChainRunner runner;
+    private final ChainRepository repository;
 
     public RunChainAction() {
-        this(new ChainRunner());
+        this(new ChainRunner(), null);
     }
 
     /** Injectable runner — the channel-factory seam for tests and TLS policy. */
     public RunChainAction(ChainRunner runner) {
+        this(runner, null);
+    }
+
+    /** With a repository, {@code chainName} resolves stored chains. */
+    public RunChainAction(ChainRunner runner, ChainRepository repository) {
         this.runner = runner;
+        this.repository = repository;
     }
 
     @Override
@@ -51,11 +58,15 @@ public final class RunChainAction implements ProtoAction {
         ObjectNode schema = baseSchema();
         ObjectNode properties = schema.putObject("properties");
         properties.set("chain", chainSchema());
+        properties.putObject("chainName")
+                .put("type", "string")
+                .put("description", "A stored chain to run instead of an inline 'chain' — "
+                        + "registered via the registry's chains endpoint.");
         properties.putObject("input")
                 .put("type", "object")
                 .put("description", "The chain input, as proto3 JSON of the chain's "
                         + "inputType.");
-        schema.putArray("required").add("chain").add("input");
+        schema.putArray("required").add("input");
         schema.put("additionalProperties", false);
         return schema;
     }
@@ -64,10 +75,25 @@ public final class RunChainAction implements ProtoAction {
     public ObjectNode execute(ObjectNode input, ActionContext context) {
         ObjectNode result = JsonNodeFactory.instance.objectNode();
         JsonNode chainNode = input.get("chain");
+        JsonNode nameNode = input.get("chainName");
+        if (chainNode == null && nameNode != null && nameNode.isTextual()) {
+            if (repository == null) {
+                result.put("ok", false);
+                result.put("error", "No chain repository is mounted; run with an inline "
+                        + "'chain' or start a server with a registry");
+                return result;
+            }
+            chainNode = repository.chain(nameNode.asText()).orElse(null);
+            if (chainNode == null) {
+                result.put("ok", false);
+                result.put("error", "No stored chain named '" + nameNode.asText() + "'");
+                return result;
+            }
+        }
         JsonNode inputNode = input.get("input");
         if (!(chainNode instanceof ObjectNode chain) || !(inputNode instanceof ObjectNode)) {
             result.put("ok", false);
-            result.put("error", "'chain' and 'input' objects are required");
+            result.put("error", "'chain' (or 'chainName') and 'input' objects are required");
             return result;
         }
         ChainDefinition definition;

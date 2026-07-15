@@ -279,6 +279,46 @@ class TransformsTest {
     }
 
     @Test
+    void redactMasksDeclaredSensitivityClasses() throws Exception {
+        String metadataProto = new String(getClass().getClassLoader()
+                .getResourceAsStream("ai/pipestream/proto/meta/v1/metadata.proto")
+                .readAllBytes(), StandardCharsets.UTF_8);
+        String customerProto = """
+                syntax = "proto3";
+                package smt.test;
+                import "ai/pipestream/proto/meta/v1/metadata.proto";
+                message Customer {
+                  string id = 1;
+                  string email = 2 [(ai.pipestream.proto.meta.v1.field) = {sensitivity: "pii"}];
+                }
+                """;
+        CompiledProtos compiled = new ProtoSourceCompiler().compile(ProtoSourceSet.builder()
+                .add("ai/pipestream/proto/meta/v1/metadata.proto", metadataProto, "test")
+                .add("smt/test/customer.proto", customerProto, "test")
+                .build());
+        Descriptor customer = compiled.descriptorFor("smt/test/customer.proto").orElseThrow()
+                .findMessageTypeByName("Customer");
+
+        Map<String, String> props = new HashMap<>();
+        props.put(ValueCodec.DESCRIPTOR_SET, Base64.getEncoder()
+                .encodeToString(compiled.descriptorSet().toByteArray()));
+        props.put(ValueCodec.MESSAGE_TYPE, "smt.test.Customer");
+        props.put(RedactMessage.STRATEGY, "redact");
+        RedactMessage<SinkRecord> smt = new RedactMessage<>();
+        smt.configure(props);
+        transform = smt;
+
+        DynamicMessage message = DynamicMessage.newBuilder(customer)
+                .setField(customer.findFieldByName("id"), "c-1")
+                .setField(customer.findFieldByName("email"), "pat@example.com")
+                .build();
+        SinkRecord out = smt.apply(record(message.toByteArray()));
+        DynamicMessage masked = DynamicMessage.parseFrom(customer, (byte[]) out.value());
+        assertThat(masked.getField(customer.findFieldByName("email"))).isEqualTo("***");
+        assertThat(masked.getField(customer.findFieldByName("id"))).isEqualTo("c-1");
+    }
+
+    @Test
     void unknownMessageTypesAreRejectedAtConfigure() {
         Map<String, String> props = baseConfig();
         props.put(ValueCodec.MESSAGE_TYPE, "smt.test.NoSuch");
