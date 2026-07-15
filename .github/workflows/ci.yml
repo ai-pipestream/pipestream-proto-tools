@@ -112,6 +112,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Prepare the shared Iceberg warehouse volume
+        # The catalog container (uid 1000) and the test JVM (the runner user) share
+        # this tree; both must be able to create entries under it.
+        run: mkdir -p /tmp/protomolt-iceberg-warehouse/client && chmod -R 777 /tmp/protomolt-iceberg-warehouse
+
       - name: Start registries
         run: docker compose -f docker-compose.integration.yml up -d --wait
 
@@ -119,6 +124,7 @@ jobs:
         run: >
           ./gradlew :protomolt-schema-apicurio:test :protomolt-schema-confluent:test
           :protomolt-index-solr:test :protomolt-index-opensearch:test
+          :protomolt-iceberg:test
           --rerun-tasks --console=plain
 
       - name: Fail if any integration suite skipped
@@ -128,6 +134,7 @@ jobs:
             schema/confluent/build/test-results/test/TEST-*Integration*.xml \
             index/solr/build/test-results/test/TEST-*Integration*.xml \
             index/opensearch/build/test-results/test/TEST-*Integration*.xml \
+            lake/iceberg/build/test-results/test/TEST-*Integration*.xml \
             | grep -o '[0-9]*' | paste -sd+ | bc)
           echo "skipped integration tests: $skipped"
           test "$skipped" -eq 0

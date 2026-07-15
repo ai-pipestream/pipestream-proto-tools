@@ -43,13 +43,28 @@ public final class IcebergSink {
      */
     public static Table ensureTable(Catalog catalog, TableIdentifier identifier,
                                     Descriptor descriptor) {
+        return ensureTable(catalog, identifier, descriptor, null);
+    }
+
+    /**
+     * @param location explicit table base location, or null for the catalog's default —
+     *        useful when the caller must own the directory tree (shared-volume rigs where
+     *        the catalog service and the writer run as different users)
+     */
+    public static Table ensureTable(Catalog catalog, TableIdentifier identifier,
+                                    Descriptor descriptor, String location) {
         Objects.requireNonNull(catalog, "catalog");
         Objects.requireNonNull(identifier, "identifier");
         if (catalog.tableExists(identifier)) {
             return catalog.loadTable(identifier);
         }
         Schema schema = IcebergSchemas.fromDescriptor(descriptor);
-        Table table = catalog.createTable(identifier, schema, PartitionSpec.unpartitioned());
+        var builder = catalog.buildTable(identifier, schema)
+                .withPartitionSpec(PartitionSpec.unpartitioned());
+        if (location != null) {
+            builder.withLocation(location);
+        }
+        Table table = builder.create();
         // The mapping must be derived AFTER creation: catalogs assign fresh field ids to
         // the schema they store, and a mapping minted from the pre-creation ids would
         // resolve nested columns to the wrong (or no) fields.

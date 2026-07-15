@@ -55,6 +55,21 @@ types become entry messages), timestamps as `google.protobuf.Timestamp`. The
 generated source compiles, so the lake's shape can live in the schema registry
 and flow through every other verb.
 
+## The live integration suite
+
+`docker-compose.integration.yml` includes `apache/iceberg-rest-fixture` on
+port 18181 with a warehouse volume shared between the container and the host,
+and `IcebergRestLiveIntegrationTest` drives the whole lane against it —
+tables created over the wire, snapshots committed through REST, data read
+back by Iceberg's reader. The suite skips when the catalog is down; CI runs
+it with the stack up and fails if it skipped. Two portability notes baked
+into the rig: table locations are client-owned (the catalog container and
+the test JVM run as different users on CI, and whoever owns the tree must be
+the data writer), and the client uses `LocalFileIO` — a plain-`java.nio`
+`FileIO` this module ships because Iceberg's default hands `file://` paths
+to `HadoopFileIO`, which relies on `Subject.getSubject`, removed in JDK 24+
+(JEP 486).
+
 ## Boundaries
 
 - One data file per `append` call; size your batches accordingly. Partitioned

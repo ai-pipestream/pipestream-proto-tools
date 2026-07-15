@@ -3,6 +3,7 @@
 # Apicurio native API:      http://localhost:18780
 # Apicurio ccompat API:     http://localhost:18780/apis/ccompat/v7
 # Confluent Schema Registry: http://localhost:18781
+# Iceberg REST catalog:      http://localhost:18181
 services:
   apicurio:
     image: apicurio/apicurio-registry:3.0.13
@@ -62,6 +63,24 @@ services:
     command: ["solr-precreate", "protomolt"]
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8983/solr/admin/info/system || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Iceberg REST catalog for the lake-module integration suite. The warehouse is
+  # a host tmp directory mounted at the SAME absolute path inside the container,
+  # so the catalog (in the container) and the test JVM (on the host) both resolve
+  # file:// data locations without an object store in the loop.
+  iceberg-rest:
+    image: apache/iceberg-rest-fixture:1.10.1
+    ports:
+      - "18181:8181"
+    environment:
+      CATALOG_WAREHOUSE: file:///tmp/protomolt-iceberg-warehouse
+    volumes:
+      - /tmp/protomolt-iceberg-warehouse:/tmp/protomolt-iceberg-warehouse
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8181/v1/config || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 30
