@@ -110,7 +110,11 @@ class SolrLiveIntegrationTest {
         JsonNode node = JSON.readTree(response.body());
         boolean clean = response.statusCode() == 200
                 && (node.path("errors").isMissingNode() || node.path("errors").isEmpty());
-        if (!clean && allowAlreadyExists && response.body().contains("already exists")) {
+        // Idempotence noise on a precreated core: re-adds say "already exists",
+        // pre-delete of a not-yet-added copy field says "not found".
+        if (!clean && allowAlreadyExists
+                && (response.body().contains("already exists")
+                        || response.body().contains("not found"))) {
             return node;
         }
         assertThat(clean).as("%s: %s", path, response.body()).isTrue();
@@ -136,7 +140,19 @@ class SolrLiveIntegrationTest {
         for (Map<String, Object> field : schema.fields()) {
             post("/" + core + "/schema", Map.of("add-field", field), true);
         }
+        // Copy fields are the one Schema API piece with no "already exists" rejection:
+        // re-adding silently duplicates the directive, and duplicated copies then feed
+        // single-valued destinations twice. Delete every matching directive (runs may
+        // have accumulated several), then add exactly one.
+        JsonNode existing = get("/" + core + "/schema/copyfields").path("copyFields");
         for (Map<String, Object> copy : schema.copyFields()) {
+            for (JsonNode entry : existing) {
+                if (entry.path("source").asText().equals(copy.get("source"))
+                        && entry.path("dest").asText().equals(copy.get("dest"))) {
+                    post("/" + core + "/schema", Map.of("delete-copy-field",
+                            Map.of("source", copy.get("source"), "dest", copy.get("dest"))), true);
+                }
+            }
             post("/" + core + "/schema", Map.of("add-copy-field", copy), true);
         }
         JsonNode fields = get("/" + core + "/schema/fields");

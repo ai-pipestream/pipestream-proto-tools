@@ -16,10 +16,12 @@ class CheckRulesActionTest {
     private static final String ORDER_PROTO = """
             syntax = "proto3";
             package shop.v1;
+            import "google/protobuf/struct.proto";
             message Order {
               string id = 1;
               int64 qty = 2;
               string note = 3;
+              google.protobuf.Struct extras = 4;
             }
             """;
 
@@ -100,6 +102,20 @@ class CheckRulesActionTest {
         assertThat(result.get("message").get("id").asText()).isEqualTo("c-9");
         assertThat(result.get("message").get("note").asText()).isEqualTo("Pat");
         assertThat(result.get("filterResults").get(0).asBoolean()).isTrue();
+    }
+
+    @Test
+    void structPathsPassStaticallyAndMapForRealInTheDryRun() throws Exception {
+        // Struct keys are undeclared, so the static pass reports nothing — and the
+        // runtime mapper genuinely writes and reads through them, proven by the dry run.
+        ObjectNode result = catalog.execute("check-rules", singleSource("""
+                "rules": ["extras.warehouse = id", "note = extras.warehouse"]
+                """));
+        assertThat(result.get("ok").asBoolean()).isTrue();
+        assertThat(result.get("findings")).isEmpty();
+        assertThat(result.get("message").get("extras").get("warehouse").asText())
+                .isEqualTo("o-1");
+        assertThat(result.get("message").get("note").asText()).isEqualTo("o-1");
     }
 
     @Test

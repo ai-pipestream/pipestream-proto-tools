@@ -411,10 +411,12 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
 
             if (containerBuilder.getDescriptorForType().getFullName().equals(Struct.getDescriptor().getFullName())) {
                 try {
-                    // This is the key insight: build the generic message, then parse it back into a concrete Struct to get a proper builder.
+                    // Round-trip through bytes: the builder's Struct descriptor may be a
+                    // runtime-compiled copy, so typed merges would reject it; the wire form
+                    // is identical either way.
                     Struct currentStruct = Struct.parseFrom(containerBuilder.build().toByteString());
                     Struct modifiedStruct = putStructKey(currentStruct, result.structKeys, 0, wrapValue(value));
-                    containerBuilder.clear().mergeFrom(modifiedStruct);
+                    containerBuilder.clear().mergeFrom(modifiedStruct.toByteString());
                 } catch(InvalidProtocolBufferException e) {
                     throw new MappingException("Failed to rebuild struct for setting value", e, rule);
                 }
@@ -425,6 +427,7 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                 // mirroring the null semantics already implemented for Struct paths.
                 if (value == null) {
                     containerBuilder.clearField(fd);
+                    result.commit();
                     return;
                 }
 
@@ -448,6 +451,7 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                     containerBuilder.setField(fd, convertedValue);
                 }
             }
+            result.commit();
         }
 
         public void appendValue(Message.Builder root, String path, Object value, String rule) throws MappingException {
@@ -461,7 +465,8 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                 try {
                     Struct currentStruct = Struct.parseFrom(finalBuilder.build().toByteString());
                     Struct modifiedStruct = appendStructKey(currentStruct, result.structKeys, 0, value);
-                    finalBuilder.clear().mergeFrom(modifiedStruct);
+                    finalBuilder.clear().mergeFrom(modifiedStruct.toByteString());
+                    result.commit();
                     return;
                 } catch (InvalidProtocolBufferException e) {
                     throw new MappingException("Failed to rebuild struct for appending value", e, rule);
@@ -480,6 +485,7 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
             } else {
                 finalBuilder.addRepeatedField(fd, typeConverter.convertToFieldType(value, fd));
             }
+            result.commit();
         }
 
         public void clearField(Message.Builder root, String path, String rule) throws MappingException {
@@ -494,7 +500,7 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                 try {
                     Struct currentStruct = Struct.parseFrom(containerBuilder.build().toByteString());
                     Struct modifiedStruct = removeStructKey(currentStruct, result.structKeys, 0);
-                    containerBuilder.clear().mergeFrom(modifiedStruct);
+                    containerBuilder.clear().mergeFrom(modifiedStruct.toByteString());
                 } catch(InvalidProtocolBufferException e) {
                     throw new MappingException("Failed to rebuild struct for clearing field", e, rule);
                 }
@@ -502,6 +508,7 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                 FieldDescriptor fd = findField(containerBuilder.getDescriptorForType(), fieldName, rule);
                 containerBuilder.clearField(fd);
             }
+            result.commit();
         }
 
         private static class PathResolutionResult {
@@ -509,10 +516,34 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
             final String finalPathPart;
             /** When the container is a Struct: the chain of struct keys (ending with {@link #finalPathPart}). */
             final String[] structKeys;
-            PathResolutionResult(Object container, String[] structKeys) {
+            /** Ancestors of a detached container, root first, with the field descended at each. */
+            private final List<Message.Builder> parents;
+            private final List<FieldDescriptor> descent;
+
+            PathResolutionResult(Object container, String[] structKeys,
+                                 List<Message.Builder> parents, List<FieldDescriptor> descent) {
                 this.container = container;
                 this.structKeys = structKeys;
                 this.finalPathPart = structKeys[structKeys.length - 1];
+                this.parents = parents;
+                this.descent = descent;
+            }
+
+            /**
+             * Folds a detached nested container back into its ancestors. Descent is done on
+             * builder copies because {@code DynamicMessage.Builder} does not support
+             * {@code getFieldBuilder}; every mutation therefore commits explicitly. A
+             * top-level container has no ancestors and commits as a no-op.
+             */
+            void commit() {
+                if (parents.isEmpty()) {
+                    return;
+                }
+                Message.Builder child = (Message.Builder) container;
+                for (int i = parents.size() - 1; i >= 0; i--) {
+                    parents.get(i).setField(descent.get(i), child.build());
+                    child = parents.get(i);
+                }
             }
         }
 
@@ -528,11 +559,13 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
         private PathResolutionResult resolvePathToFinalContainer(Message.Builder root, String path, String rule, boolean materializeParents) throws MappingException {
             String[] parts = path.split(PATH_SEPARATOR_REGEX);
             Message.Builder currentBuilder = root;
+            List<Message.Builder> parents = new ArrayList<>();
+            List<FieldDescriptor> descent = new ArrayList<>();
 
             for (int i = 0; i < parts.length - 1; i++) {
                 String part = parts[i];
                 if (currentBuilder.getDescriptorForType().getFullName().equals(Struct.getDescriptor().getFullName())) {
-                    return new PathResolutionResult(currentBuilder, Arrays.copyOfRange(parts, i, parts.length));
+                    return new PathResolutionResult(currentBuilder, Arrays.copyOfRange(parts, i, parts.length), parents, descent);
                 }
                 FieldDescriptor fd = findField(currentBuilder.getDescriptorForType(), part, rule);
 
@@ -542,9 +575,13 @@ public class ProtoFieldMapperImpl implements ProtoFieldMapper {
                 if (!materializeParents && !currentBuilder.hasField(fd)) {
                     return null;
                 }
-                currentBuilder = currentBuilder.getFieldBuilder(fd);
+                // Detached descent: DynamicMessage builders do not support getFieldBuilder,
+                // so every level descends on a copy; commit() folds the chain back.
+                parents.add(currentBuilder);
+                descent.add(fd);
+                currentBuilder = ((Message) currentBuilder.getField(fd)).toBuilder();
             }
-            return new PathResolutionResult(currentBuilder, new String[]{parts[parts.length - 1]});
+            return new PathResolutionResult(currentBuilder, new String[]{parts[parts.length - 1]}, parents, descent);
         }
 
         /**
