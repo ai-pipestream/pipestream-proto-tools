@@ -72,6 +72,7 @@ netty-transport = { module = "io.netty:netty-transport", version.ref = "netty" }
 micronaut-http-server-netty = { module = "io.micronaut:micronaut-http-server-netty", version.ref = "micronaut" }
 micronaut-inject = { module = "io.micronaut:micronaut-inject", version.ref = "micronaut" }
 wire-schema = { module = "com.squareup.wire:wire-schema", version.ref = "wire" }
+jimfs = { module = "com.google.jimfs:jimfs", version = "1.3.1" }
 jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 maven-resolver-supplier = { module = "org.apache.maven.resolver:maven-resolver-supplier", version.ref = "maven-resolver" }
 maven-resolver-provider = { module = "org.apache.maven:maven-resolver-provider", version.ref = "maven" }

@@ -175,6 +175,14 @@ snapshot. Integration tests against real schema registries are opt-in and
 skip automatically when no registry is reachable; see
 [Building and testing](docs/building.md).
 
+## Runtime disk footprint
+
+ProtoMolt never writes message data to disk. The only runtime writes are
+declared schema storage: the registry's Git repository (the `--registry-git`
+path you choose, or a temporary directory in `--demo` mode) and
+`gather-git`'s persistent clone cache. Everything else — compilation of
+`.proto` text to descriptors included — runs entirely in memory.
+
 ## Naming
 
 `ProtoMolt` is the project and artifact name; the code namespace is

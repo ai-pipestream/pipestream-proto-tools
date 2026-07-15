@@ -5,4 +5,6 @@ dependencies {
 
     // .proto text -> FileDescriptorProto compilation.
     implementation libs.wire.schema
+    // In-memory scratch filesystem: runtime compilation never touches disk.
+    implementation libs.jimfs
 }
