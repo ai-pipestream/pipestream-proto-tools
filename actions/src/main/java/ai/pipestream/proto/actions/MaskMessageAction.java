@@ -30,7 +30,10 @@ final class MaskMessageAction implements ProtoAction {
                 + "***; 'encrypt' seals string/bytes values with AES-GCM (reversible only "
                 + "with the same key) and clears other types; 'decrypt' reverses encrypt "
                 + "and fails loudly on a wrong key. Recurses through nested and repeated "
-                + "messages. Returns the masked message and which field paths were touched.";
+                + "messages, and into google.protobuf.Any payloads whose type the schema "
+                + "carries. Returns the masked message, which field paths were touched, and "
+                + "'unresolvedPayloads': packed payloads whose type the schema does not "
+                + "describe, which therefore could not be masked.";
     }
 
     @Override
@@ -97,9 +100,16 @@ final class MaskMessageAction implements ProtoAction {
             throw Inputs.invalidInput("Message is not valid proto3 JSON for "
                     + descriptor.getFullName(), "/message");
         }
+        // Packed payloads resolve against everything this call can see: the schema first,
+        // which carries types the root proto never imports, then the registry, which is how a
+        // payload type arrives when the schema was given inline.
+        SensitivityMasker.PayloadResolver payloads = typeName -> {
+            Descriptor found = schema.findMessage(typeName);
+            return found != null ? found : context.registry().findDescriptorByFullName(typeName);
+        };
         SensitivityMasker.MaskResult result;
         try {
-            result = SensitivityMasker.mask(message, classes, strategy, key);
+            result = SensitivityMasker.mask(message, classes, strategy, key, payloads);
         } catch (IllegalArgumentException e) {
             throw Inputs.invalidInput(e.getMessage(), "/key");
         }
@@ -108,6 +118,14 @@ final class MaskMessageAction implements ProtoAction {
         ArrayNode masked = output.putArray("maskedFields");
         for (String path : result.maskedPaths()) {
             masked.add(path);
+        }
+        if (!result.unresolvedPaths().isEmpty()) {
+            // Reported only when it happened: these payloads were not masked, and the caller
+            // is the only one who can say whether that is acceptable.
+            ArrayNode unresolved = output.putArray("unresolvedPayloads");
+            for (String path : result.unresolvedPaths()) {
+                unresolved.add(path);
+            }
         }
         return output;
     }

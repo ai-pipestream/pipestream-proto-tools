@@ -40,7 +40,7 @@ repair strategies, which matters when the caller is a model.
 | `run-chain` | Execute an inline chain: serial unary gRPC calls, each request mapped from the chain input and prior steps' responses |
 | `check-chain` | Verify a chain without running it: methods, step scopes, gates, and every mapping type-checked |
 | `infer-schema` | Struct-to-proto: reverse-engineer a message type from JSON sample documents; returns registrable source + descriptor set |
-| `mask-message` | Mask fields by their schema-declared sensitivity classes: remove, redact, or encrypt/decrypt (AES-GCM, field-bound versioned envelope), recursively including map values |
+| `mask-message` | Mask fields by their schema-declared sensitivity classes: remove, redact, or encrypt/decrypt (AES-GCM, field-bound versioned envelope), recursively including map values and `google.protobuf.Any` payloads whose type is resolvable; payloads that are not are reported, never quietly passed |
 | `extract-metadata` | The declared metadata bag for a type |
 | `emit-okf` | Render a schema as an Open Knowledge Format (OKF v0.1) bundle: linked markdown concept documents for every message, enum, and service, inline plus zipped |
 
