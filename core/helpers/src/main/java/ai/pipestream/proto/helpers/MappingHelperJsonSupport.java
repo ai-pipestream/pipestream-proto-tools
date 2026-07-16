@@ -1,9 +1,11 @@
 package ai.pipestream.proto.helpers;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.io.UncheckedIOException;
 import java.util.List;
 
 /**
@@ -42,8 +44,8 @@ public class MappingHelperJsonSupport {
                 array.add(node);
             }
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(array);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize fields to JSON", e);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException("Failed to serialize fields to JSON", e);
         }
     }
 
@@ -57,8 +59,8 @@ public class MappingHelperJsonSupport {
         try {
             ObjectNode node = schemaNodeToJson(schema);
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize schema to JSON", e);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException("Failed to serialize schema to JSON", e);
         }
     }
 
@@ -78,8 +80,8 @@ public class MappingHelperJsonSupport {
                 array.add(node);
             }
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(array);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize suggestions to JSON", e);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException("Failed to serialize suggestions to JSON", e);
         }
     }
 
@@ -96,8 +98,8 @@ public class MappingHelperJsonSupport {
             node.put("message", result.message);
             node.put("level", result.level.name());
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize validation to JSON", e);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException("Failed to serialize validation to JSON", e);
         }
     }
 
