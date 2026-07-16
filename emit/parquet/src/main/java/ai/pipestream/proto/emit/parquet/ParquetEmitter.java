@@ -1,6 +1,7 @@
 package ai.pipestream.proto.emit.parquet;
 
 import ai.pipestream.proto.emit.Bundle;
+import ai.pipestream.proto.meta.SensitivityMasker;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Message;
 import org.apache.hadoop.conf.Configuration;
@@ -40,11 +41,23 @@ public final class ParquetEmitter {
     public static byte[] toBytes(Descriptor descriptor, Iterable<? extends Message> messages,
                                  ProtoParquetSchemas.FieldIdResolver ids)
             throws IOException {
+        return toBytes(descriptor, messages, ids, ParquetExportOptions.NONE);
+    }
+
+    /**
+     * Writes an export: only the projected columns, each message masked first per
+     * {@code options}. See {@link ParquetExportOptions}.
+     */
+    public static byte[] toBytes(Descriptor descriptor, Iterable<? extends Message> messages,
+                                 ProtoParquetSchemas.FieldIdResolver ids,
+                                 ParquetExportOptions options)
+            throws IOException {
         Objects.requireNonNull(descriptor, "descriptor");
         Objects.requireNonNull(messages, "messages");
+        Objects.requireNonNull(options, "options");
         InMemoryOutputFile output = new InMemoryOutputFile();
         try (ParquetWriter<Message> writer = new Builder(output,
-                new ProtoParquetWriteSupport(descriptor, ids))
+                new ProtoParquetWriteSupport(descriptor, ids, options.columns()))
                 .withCompressionCodec(CompressionCodecName.SNAPPY)
                 // The non-Hadoop path, both halves: PlainParquetConfiguration keeps our
                 // write support off Hadoop, and the codec factory keeps parquet's own
@@ -59,16 +72,37 @@ public final class ParquetEmitter {
                     throw new IOException("Expected " + descriptor.getFullName() + " but got "
                             + message.getDescriptorForType().getFullName());
                 }
-                writer.write(message);
+                writer.write(masked(message, options));
             }
         }
         return output.bytes();
+    }
+
+    private static Message masked(Message message, ParquetExportOptions options) {
+        if (!options.masks()) {
+            return message;
+        }
+        SensitivityMasker.Strategy strategy = options.maskStrategy();
+        boolean keyed = strategy == SensitivityMasker.Strategy.ENCRYPT
+                || strategy == SensitivityMasker.Strategy.DECRYPT;
+        return keyed
+                ? SensitivityMasker.mask(message, options.maskClasses(), strategy,
+                        options.maskKey()).message()
+                : SensitivityMasker.mask(message, options.maskClasses(), strategy).message();
     }
 
     /** The same file as a one-entry {@link Bundle}, ready for any sink. */
     public static Bundle bundle(String path, Descriptor descriptor,
                                 Iterable<? extends Message> messages) throws IOException {
         return Bundle.builder().add(path, toBytes(descriptor, messages)).build();
+    }
+
+    /** An exported file (projection and masking applied) as a one-entry {@link Bundle}. */
+    public static Bundle bundle(String path, Descriptor descriptor,
+                                Iterable<? extends Message> messages,
+                                ProtoParquetSchemas.FieldIdResolver ids,
+                                ParquetExportOptions options) throws IOException {
+        return Bundle.builder().add(path, toBytes(descriptor, messages, ids, options)).build();
     }
 
     private static final class Builder extends ParquetWriter.Builder<Message, Builder> {

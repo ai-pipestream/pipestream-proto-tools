@@ -14,6 +14,7 @@ import org.apache.parquet.schema.MessageType;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Streams protobuf messages (dynamic or generated — only the descriptor matters) into a
@@ -26,6 +27,7 @@ import java.util.Objects;
 final class ProtoParquetWriteSupport extends WriteSupport<Message> {
 
     private final Descriptor descriptor;
+    private final Set<String> projection;
     private final MessageType schema;
     private RecordConsumer consumer;
 
@@ -35,8 +37,14 @@ final class ProtoParquetWriteSupport extends WriteSupport<Message> {
 
     ProtoParquetWriteSupport(Descriptor descriptor,
                              ProtoParquetSchemas.FieldIdResolver ids) {
+        this(descriptor, ids, Set.of());
+    }
+
+    ProtoParquetWriteSupport(Descriptor descriptor, ProtoParquetSchemas.FieldIdResolver ids,
+                             Set<String> projection) {
         this.descriptor = Objects.requireNonNull(descriptor, "descriptor");
-        this.schema = ProtoParquetSchemas.schema(descriptor, ids);
+        this.projection = projection == null ? Set.of() : Set.copyOf(projection);
+        this.schema = ProtoParquetSchemas.schema(descriptor, ids, this.projection);
     }
 
     @Override
@@ -72,8 +80,23 @@ final class ProtoParquetWriteSupport extends WriteSupport<Message> {
     @Override
     public void write(Message record) {
         consumer.startMessage();
-        writeFields(record);
+        writeTopFields(record);
         consumer.endMessage();
+    }
+
+    /**
+     * The top-level fields, honoring the projection. The Parquet index advances only for kept
+     * columns, so it stays aligned with the projected schema's column order - a projected-out
+     * column must not leave a gap that shifts every following column's index.
+     */
+    private void writeTopFields(Message message) {
+        int index = 0;
+        for (FieldDescriptor field : message.getDescriptorForType().getFields()) {
+            if (!projection.isEmpty() && !projection.contains(field.getName())) {
+                continue;
+            }
+            writeField(message, field, index++);
+        }
     }
 
     private void writeFields(Message message) {
