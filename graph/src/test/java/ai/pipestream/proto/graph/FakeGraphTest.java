@@ -251,6 +251,9 @@ class FakeGraphTest {
                     assertThat(e.status()).isEqualTo(403);
                     assertThat(e.code()).isEqualTo("accessDenied");
                     assertThat(e.getMessage()).contains("Insufficient privileges");
+                    // The verbose probe lane prints this raw body so a tenant-provisioning
+                    // failure can be told apart from a genuine permissions denial.
+                    assertThat(e.body()).contains("accessDenied").contains("Insufficient privileges");
                 });
     }
 }
