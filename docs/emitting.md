@@ -96,6 +96,31 @@ unsigned 32-bit values widen to `int64` so no value changes sign. Recursive
 message types cannot exist in a columnar schema and are rejected with the
 cycle named.
 
+### Projection and masking on export
+
+`ParquetExportOptions` controls what leaves in the file. Two independent tools:
+
+```java
+// Keep only some columns:
+ParquetEmitter.toBytes(descriptor, messages, ids,
+        ParquetExportOptions.project(Set.of("id", "amount")));
+
+// Obscure sensitive fields, keeping every column:
+ParquetEmitter.toBytes(descriptor, messages, ids,
+        ParquetExportOptions.masking(Set.of("pii"), SensitivityMasker.Strategy.REDACT, null));
+```
+
+**Projection** drops columns from the file schema entirely; **masking** runs each
+message through `SensitivityMasker` first, so fields carrying one of the named
+sensitivity classes are redacted, encrypted, or cleared before they are written.
+They compose. One distinction that matters: a proto3 plain scalar is a `required`
+column, so `REMOVE` only clears it to its default — a zero still writes. To keep a
+sensitive column *out* of the file, project it out; use `REDACT`/`ENCRYPT` to keep
+the column and obscure the value. Masking reads the `sensitivity` field option, so
+the descriptor must carry ProtoMolt's metadata extensions (as `compile` and
+`reflect` produce) or nothing is masked. No Hadoop is added — the same
+classloader-isolation test covers the export path.
+
 The module depends on `parquet-hadoop` and `snappy-java` — and **zero Hadoop
 jars**. Hadoop types appear only in `parquet-hadoop` method signatures
 (compile-time), never at run time: the emitter supplies its own snappy-java

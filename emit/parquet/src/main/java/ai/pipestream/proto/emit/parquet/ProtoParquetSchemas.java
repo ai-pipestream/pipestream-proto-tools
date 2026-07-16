@@ -61,6 +61,25 @@ public final class ProtoParquetSchemas {
         return new MessageType(descriptor.getFullName(), fields(descriptor, "", ids, ancestry));
     }
 
+    /**
+     * The schema keeping only the named top-level columns (empty {@code projection} keeps all).
+     * Nested structure under a kept column is unchanged; only the top level is filtered.
+     */
+    static MessageType schema(Descriptor descriptor, FieldIdResolver ids, Set<String> projection) {
+        MessageType full = schema(descriptor, ids);
+        if (projection == null || projection.isEmpty()) {
+            return full;
+        }
+        List<Type> kept = full.getFields().stream()
+                .filter(type -> projection.contains(type.getName()))
+                .toList();
+        if (kept.isEmpty()) {
+            throw new IllegalArgumentException("Projection selected no columns of "
+                    + descriptor.getFullName() + "; requested " + projection);
+        }
+        return new MessageType(descriptor.getFullName(), kept);
+    }
+
     private static List<Type> fields(Descriptor descriptor, String prefix, FieldIdResolver ids,
                                      Deque<String> ancestry) {
         if (ancestry.contains(descriptor.getFullName())) {
