@@ -365,13 +365,27 @@ public final class SchemaResolver {
                         "A message 'type' is required because the schema does not identify a single message",
                         pointer);
             }
+            Descriptor found = findMessage(typeName);
+            if (found != null) {
+                return found;
+            }
+            throw unknownType(typeName,
+                    allMessages(files).stream().map(Descriptor::getFullName).toList(), pointer);
+        }
+
+        /**
+         * The descriptor for a type this schema carries, or null when it does not. Unlike
+         * {@link #message}, an absent type is an answer rather than an error: callers
+         * resolving a packed {@code Any} payload are asking whether the schema happens to
+         * describe it.
+         */
+        public Descriptor findMessage(String typeName) {
             for (Descriptor message : allMessages(files)) {
                 if (message.getFullName().equals(typeName)) {
                     return message;
                 }
             }
-            throw unknownType(typeName,
-                    allMessages(files).stream().map(Descriptor::getFullName).toList(), pointer);
+            return null;
         }
     }
 }

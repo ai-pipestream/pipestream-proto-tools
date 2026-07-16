@@ -26,7 +26,44 @@ class MaskMessageActionTest {
             }
             """;
 
+    private static final String ENVELOPE_PROTO = """
+            syntax = "proto3";
+            package mask.any;
+            import "google/protobuf/any.proto";
+            message Envelope {
+              string id = 1;
+              google.protobuf.Any payload = 2;
+            }
+            """;
+
     private final ActionCatalog catalog = ActionCatalog.defaults(TestFixtures.personContext());
+
+    /**
+     * The envelope's own schema says nothing about what it carries, so the packed payload can
+     * only be masked by resolving its type elsewhere: here the registry, which is also what
+     * let the JSON arrive in the first place.
+     */
+    @Test
+    void masksInsideAPayloadPackedFromAnotherSchema() throws Exception {
+        ObjectNode input = obj("""
+                {"schema": {"sources": {}}, "type": "mask.any.Envelope",
+                 "message": {"id": "e-1",
+                             "payload": {"@type": "type.googleapis.com/actions.test.Person",
+                                         "name": "Pat Smith", "age": 30}},
+                 "classes": ["pii"], "strategy": "redact"}
+                """);
+        ((ObjectNode) input.get("schema").get("sources"))
+                .put("mask/any/envelope.proto", ENVELOPE_PROTO);
+
+        ObjectNode result = catalog.execute("mask-message", input);
+
+        JsonNode payload = result.get("message").get("payload");
+        assertThat(payload.get("name").asText()).isEqualTo("***");
+        assertThat(payload.get("age").asInt()).isEqualTo(30);   // unclassed: survives
+        assertThat(result.get("maskedFields")).extracting(JsonNode::asText)
+                .contains("payload.name");
+        assertThat(result.has("unresolvedPayloads")).isFalse();
+    }
 
     private ObjectNode maskInput(String extraJson) throws Exception {
         String metadataProto = new String(getClass().getClassLoader()

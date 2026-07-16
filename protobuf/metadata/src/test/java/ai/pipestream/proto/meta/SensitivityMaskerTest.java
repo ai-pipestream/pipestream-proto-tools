@@ -1,7 +1,9 @@
 package ai.pipestream.proto.meta;
 
+import ai.pipestream.proto.meta.testdata.AnnotatedDoc;
 import ai.pipestream.proto.meta.testdata.MaskerDoc;
 import ai.pipestream.proto.meta.testdata.SecretNote;
+import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import org.junit.jupiter.api.Test;
 
@@ -147,5 +149,107 @@ class SensitivityMaskerTest {
         MaskerDoc sealed = (MaskerDoc) SensitivityMasker.mask(doc(), Set.of("secret"),
                 SensitivityMasker.Strategy.ENCRYPT, KEY).message();
         assertThat(sealed.getToken().byteAt(0)).isEqualTo((byte) 1);
+    }
+
+    private static MaskerDoc packed() {
+        SecretNote note = SecretNote.newBuilder().setBody("hidden").setLabel("keep").build();
+        return MaskerDoc.newBuilder()
+                .setEnvelope(Any.pack(note))
+                .addEnvelopes(Any.pack(
+                        SecretNote.newBuilder().setBody("listed").setLabel("open").build()))
+                .putKeyedEnvelopes("k", Any.pack(
+                        SecretNote.newBuilder().setBody("keyed").setLabel("open").build()))
+                .build();
+    }
+
+    /** A classed field does not stop being sensitive because someone packed it in an Any. */
+    @Test
+    void redactReachesInsidePackedPayloads() throws Exception {
+        SensitivityMasker.MaskResult result = SensitivityMasker.mask(packed(), Set.of("pii"),
+                SensitivityMasker.Strategy.REDACT);
+        MaskerDoc masked = (MaskerDoc) result.message();
+
+        assertThat(masked.getEnvelope().unpack(SecretNote.class).getBody()).isEqualTo("***");
+        assertThat(masked.getEnvelopes(0).unpack(SecretNote.class).getBody()).isEqualTo("***");
+        assertThat(masked.getKeyedEnvelopesOrThrow("k").unpack(SecretNote.class).getBody())
+                .isEqualTo("***");
+        // The unclassed sibling inside the payload survives, so this is masking and not just
+        // clobbering the envelope.
+        assertThat(masked.getEnvelope().unpack(SecretNote.class).getLabel()).isEqualTo("keep");
+        assertThat(result.maskedPaths())
+                .contains("envelope.body", "envelopes.body", "keyed_envelopes[k].body");
+        assertThat(result.unresolvedPaths()).isEmpty();
+        // The type URL still describes what is inside after the rewrite.
+        assertThat(masked.getEnvelope().getTypeUrl())
+                .isEqualTo(Any.pack(SecretNote.getDefaultInstance()).getTypeUrl());
+    }
+
+    /** Repacking is not free: an untouched payload keeps its exact bytes. */
+    @Test
+    void aPayloadWithNothingClassedIsLeftByteForByte() {
+        MaskerDoc doc = MaskerDoc.newBuilder()
+                .setEnvelope(Any.pack(AnnotatedDoc.newBuilder()
+                        .setDocId("d1").setTitle("public title").build()))
+                .build();
+        SensitivityMasker.MaskResult result = SensitivityMasker.mask(doc, Set.of("pii"),
+                SensitivityMasker.Strategy.REDACT);
+
+        assertThat(((MaskerDoc) result.message()).getEnvelope().getValue())
+                .isEqualTo(doc.getEnvelope().getValue());
+        assertThat(result.unresolvedPaths()).isEmpty();
+    }
+
+    /**
+     * The one case the masker cannot honour: an unknown payload type. It must say so rather
+     * than report a clean pass over bytes it never read.
+     */
+    @Test
+    void anUnresolvablePayloadIsReportedInsteadOfSilentlyPassed() {
+        MaskerDoc doc = MaskerDoc.newBuilder()
+                .setEnvelope(Any.newBuilder()
+                        .setTypeUrl("type.googleapis.com/nowhere.Unknown")
+                        .setValue(ByteString.copyFromUtf8("opaque"))
+                        .build())
+                .build();
+        SensitivityMasker.MaskResult result = SensitivityMasker.mask(doc, Set.of("pii"),
+                SensitivityMasker.Strategy.REDACT);
+
+        assertThat(result.unresolvedPaths()).containsExactly("envelope");
+        assertThat(result.maskedPaths()).noneMatch(path -> path.startsWith("envelope"));
+        assertThat(((MaskerDoc) result.message()).getEnvelope()).isEqualTo(doc.getEnvelope());
+    }
+
+    /** An explicit resolver sees payload types the message's own imports never reach. */
+    @Test
+    void anExplicitResolverOpensWhatImportsCannotReach() throws Exception {
+        MaskerDoc doc = MaskerDoc.newBuilder()
+                .setEnvelope(Any.newBuilder()
+                        .setTypeUrl("type.googleapis.com/elsewhere.Note")
+                        .setValue(SecretNote.newBuilder().setBody("hidden").build().toByteString())
+                        .build())
+                .build();
+        assertThat(SensitivityMasker.mask(doc, Set.of("pii"),
+                SensitivityMasker.Strategy.REDACT).unresolvedPaths()).containsExactly("envelope");
+
+        SensitivityMasker.MaskResult result = SensitivityMasker.mask(doc, Set.of("pii"),
+                SensitivityMasker.Strategy.REDACT, null,
+                name -> name.equals("elsewhere.Note") ? SecretNote.getDescriptor() : null);
+
+        assertThat(result.unresolvedPaths()).isEmpty();
+        assertThat(SecretNote.parseFrom(((MaskerDoc) result.message()).getEnvelope().getValue())
+                .getBody()).isEqualTo("***");
+    }
+
+    /** Sealing inside a payload binds to the payload's own field identity, so it reopens. */
+    @Test
+    void encryptAndDecryptRoundTripInsideAPackedPayload() throws Exception {
+        MaskerDoc sealed = (MaskerDoc) SensitivityMasker.mask(packed(), Set.of("pii"),
+                SensitivityMasker.Strategy.ENCRYPT, KEY).message();
+        assertThat(sealed.getEnvelope().unpack(SecretNote.class).getBody())
+                .isNotEqualTo("hidden");
+
+        MaskerDoc opened = (MaskerDoc) SensitivityMasker.mask(sealed, Set.of("pii"),
+                SensitivityMasker.Strategy.DECRYPT, KEY).message();
+        assertThat(opened.getEnvelope().unpack(SecretNote.class).getBody()).isEqualTo("hidden");
     }
 }
