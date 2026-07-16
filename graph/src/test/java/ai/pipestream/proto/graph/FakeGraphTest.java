@@ -168,11 +168,7 @@ class FakeGraphTest {
 
     private static void respond(HttpExchange exchange, int status, String body)
             throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("content-type", "application/json");
-        exchange.sendResponseHeaders(status, bytes.length);
-        exchange.getResponseBody().write(bytes);
-        exchange.close();
+        FakeGraphSupport.respond(exchange, status, body);
     }
 
     private static GraphClient client(String token) {

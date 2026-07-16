@@ -1,6 +1,5 @@
 package ai.pipestream.proto.graph;
 
-import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -115,7 +114,7 @@ class GraphProbeTest {
         // bare status code hides but the verbose body reveals.
         server.removeContext("/v1.0/me/drive");
         server.createContext("/v1.0/me/drive", exchange ->
-                respond(exchange, 403, "{\"error\":{\"code\":\"notAllowed\","
+                FakeGraphSupport.respond(exchange, 403, "{\"error\":{\"code\":\"notAllowed\","
                         + "\"message\":\"OneDrive is not provisioned for this user.\","
                         + "\"innerError\":{\"code\":\"provisioningError\"}}}"));
 
@@ -136,15 +135,6 @@ class GraphProbeTest {
     }
 
     private void register(String path, String json) {
-        server.createContext(path, exchange -> respond(exchange, 200, json));
-    }
-
-    private static void respond(HttpExchange exchange, int status, String body) throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(status, bytes.length);
-        try (var os = exchange.getResponseBody()) {
-            os.write(bytes);
-        }
+        server.createContext(path, exchange -> FakeGraphSupport.respond(exchange, 200, json));
     }
 }

@@ -25,7 +25,8 @@ tasks.register('graphProbe', JavaExec) {
                 probeArgs += ["--${name}".toString(), value.toString()]
             }
         }
-        if (findProperty('verbose') != null) {
+        def verbose = findProperty('verbose')
+        if (verbose != null && !verbose.toString().equalsIgnoreCase('false')) {
             probeArgs += '--verbose'
         }
         args probeArgs

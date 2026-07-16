@@ -33,10 +33,17 @@ public final class GraphInferSchemaSample {
         String client = arg(args, "--client", null);
         String folder = arg(args, "--folder", "/");
         String typeName = arg(args, "--type", "sharepoint.v1.Documents");
-        int limit = Integer.parseInt(arg(args, "--limit", "25"));
         if (tenant == null || client == null) {
             System.err.println("usage: GraphInferSchemaSample --tenant <id> --client <id> "
                     + "[--folder <path>] [--type <full.Name>] [--limit <n>]");
+            System.exit(2);
+            return;
+        }
+        int limit;
+        try {
+            limit = Integer.parseInt(arg(args, "--limit", "25"));
+        } catch (NumberFormatException e) {
+            System.err.println("--limit must be a whole number");
             System.exit(2);
             return;
         }
@@ -51,7 +58,10 @@ public final class GraphInferSchemaSample {
 
         List<Struct> samples = new ArrayList<>();
         for (JsonNode child : files.children(driveId, folder).path("value")) {
-            if (samples.size() >= limit || child.path("folder").isObject()) {
+            if (samples.size() >= limit) {
+                break;   // enough samples gathered
+            }
+            if (child.path("folder").isObject()) {
                 continue;   // sample the files in the folder, not sub-folders
             }
             ObjectNode fields = files.listItemFieldsOnly(driveId, child.path("id").asText());

@@ -98,7 +98,16 @@ public final class GraphFiles {
      */
     public ObjectNode listItemFieldsOnly(String driveId, String itemId)
             throws IOException, InterruptedException {
-        JsonNode fields = listItemFields(driveId, itemId).path("fields");
+        JsonNode fields;
+        try {
+            fields = listItemFields(driveId, itemId).path("fields");
+        } catch (GraphClient.GraphApiException e) {
+            if (e.status() == 404) {
+                // A file with no backing list item (a plain personal-OneDrive file): no columns.
+                return JsonNodeFactory.instance.objectNode();
+            }
+            throw e;
+        }
         return fields.isObject() ? (ObjectNode) fields : JsonNodeFactory.instance.objectNode();
     }
 

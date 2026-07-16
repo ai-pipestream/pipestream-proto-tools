@@ -8,7 +8,6 @@ import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Struct;
 import com.google.protobuf.util.JsonFormat;
-import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,10 +15,10 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The read -&gt; infer-schema lane end to end, no live tenant: a document's SharePoint list-item
@@ -50,14 +49,16 @@ class GraphInferSchemaDemoTest {
     @BeforeEach
     void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/v1.0/drives/d1/items/i1/listItem", exchange -> {
-            byte[] body = LIST_ITEM.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, body.length);
-            try (var os = exchange.getResponseBody()) {
-                os.write(body);
-            }
-        });
+        server.createContext("/v1.0/drives/d1/items/i1/listItem",
+                exchange -> FakeGraphSupport.respond(exchange, 200, LIST_ITEM));
+        // A file with no backing list item (a plain personal-OneDrive file): Graph 404s.
+        server.createContext("/v1.0/drives/d1/items/none/listItem",
+                exchange -> FakeGraphSupport.respond(exchange, 404, "{\"error\":{\"code\":"
+                        + "\"itemNotFound\",\"message\":\"The resource could not be found.\"}}"));
+        // A genuine failure that must not be swallowed as \"no columns\".
+        server.createContext("/v1.0/drives/d1/items/denied/listItem",
+                exchange -> FakeGraphSupport.respond(exchange, 403, "{\"error\":{\"code\":"
+                        + "\"accessDenied\",\"message\":\"Access denied.\"}}"));
         server.start();
         String base = "http://127.0.0.1:" + server.getAddress().getPort();
         files = new GraphFiles(new GraphClient(base + "/v1.0", () -> "test-token"));
@@ -110,6 +111,20 @@ class GraphInferSchemaDemoTest {
         // is reported rather than silently dropped.
         assertThat(rendered.skipped())
                 .anySatisfy(s -> assertThat(s).containsIgnoringCase("reviewer"));
+    }
+
+    @Test
+    void listItemFieldsOnlyIsEmptyForAFileWithNoListItem() throws Exception {
+        // The personal-OneDrive case the javadoc promises: no columns, an empty object, no 404.
+        assertThat(files.listItemFieldsOnly("d1", "none").isEmpty()).isTrue();
+    }
+
+    @Test
+    void listItemFieldsOnlyStillPropagatesRealFailures() {
+        // A 403 is not "no columns" - it must surface, not be swallowed as an empty object.
+        assertThatThrownBy(() -> files.listItemFieldsOnly("d1", "denied"))
+                .isInstanceOfSatisfying(GraphClient.GraphApiException.class,
+                        e -> assertThat(e.status()).isEqualTo(403));
     }
 
     private ShapeSynthesizer.SynthesizedShape infer(String fullName) throws Exception {
