@@ -5,6 +5,7 @@
 # Confluent Schema Registry: http://localhost:18781
 # Iceberg REST catalog:      http://localhost:18181
 # Iceberg REST catalog (S3):  http://localhost:18182  (warehouse on RustFS)
+# Gravitino Iceberg REST:    http://localhost:19002/iceberg
 # RustFS (S3 API):           http://localhost:19000
 services:
   apicurio:
@@ -86,6 +87,24 @@ services:
       interval: 5s
       timeout: 3s
       retries: 30
+
+  # Apache Gravitino's Iceberg REST catalog service: the same lake lane pointed at a real
+  # metadata lake instead of the reference fixture. The catalog backend defaults to memory,
+  # which keeps the fixture stateless, and the warehouse is the shared tmp tree the reference
+  # catalog already uses. Note the endpoint lives under /iceberg, not the root.
+  gravitino-iceberg-rest:
+    image: apache/gravitino-iceberg-rest:1.3.0
+    ports:
+      - "19002:9001"
+    environment:
+      GRAVITINO_ICEBERG_REST_WAREHOUSE: file:///tmp/protomolt-iceberg-warehouse
+    volumes:
+      - /tmp/protomolt-iceberg-warehouse:/tmp/protomolt-iceberg-warehouse
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9001/iceberg/v1/config || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
 
   # RustFS: a fast, Apache-2.0, S3-compatible object store (a MinIO replacement) that
   # backs the S3FileIO escape-hatch suite. Single ephemeral volume - CI data is thrown
