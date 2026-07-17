@@ -104,6 +104,13 @@ public final class ConfluentSchemaRegistryLoader implements DescriptorLoader, Au
     private record CachedDescriptors(List<FileDescriptor> descriptors, long expiresAtNanos) {
     }
 
+    /**
+     * Schema ids are immutable in a Confluent-compatible registry: an id names one exact schema
+     * for the registry's lifetime, so a resolved one never needs revisiting and this cache has no
+     * TTL. Subjects move, and are deliberately not cached here.
+     */
+    private final Map<Integer, FileDescriptor> schemasById = new java.util.concurrent.ConcurrentHashMap<>();
+
     /** Registry response with a non-2xx status; carries the status for failure classification. */
     static final class RegistryHttpException extends DescriptorLoadException {
         private final int statusCode;
@@ -360,6 +367,92 @@ public final class ConfluentSchemaRegistryLoader implements DescriptorLoader, Au
                 resolving.pop();
             }
             files.put(name, schema.path("schema").asText());
+        }
+    }
+
+    /**
+     * The schema a wire-format frame's id names, with its references resolved and linked, which is
+     * what a deserializer needs: the frame carries an id, not a subject, and the id is the only
+     * thing tying those bytes to a schema.
+     *
+     * <p>Resolved schemas are cached forever, because an id in a Confluent-compatible registry
+     * names one exact schema and never names another.</p>
+     *
+     * @throws DescriptorLoadException if the id is unknown, is not PROTOBUF, or does not compile
+     */
+    public FileDescriptor schemaById(int schemaId) throws DescriptorLoadException {
+        FileDescriptor cached = schemasById.get(schemaId);
+        if (cached != null) {
+            return cached;
+        }
+        FileDescriptor resolved = fetchSchemaById(schemaId);
+        schemasById.put(schemaId, resolved);
+        return resolved;
+    }
+
+    private FileDescriptor fetchSchemaById(int schemaId) throws DescriptorLoadException {
+        String path = "/schemas/ids/" + schemaId;
+        try {
+            JsonNode schema = getJson(path);
+            String schemaType = schema.path("schemaType").asText("AVRO");
+            if (!"PROTOBUF".equals(schemaType)) {
+                throw new DescriptorLoadException("Schema id " + schemaId + " is " + schemaType
+                        + ", not PROTOBUF");
+            }
+            Map<String, String> files = new LinkedHashMap<>();
+            Deque<String> resolving = new ArrayDeque<>();
+            resolving.push(path);
+            collectReferences(schema.path("references"), files, resolving, new HashMap<>());
+            String rootPath = rootFileName("schema-id-" + schemaId, files);
+            files.put(rootPath, schema.path("schema").asText());
+
+            ProtoSourceSet.Builder sources = ProtoSourceSet.builder();
+            files.forEach((file, text) -> sources.add(file, text, "confluent:" + baseUrl + path));
+            CompiledProtos compiled = compiler.compile(sources.build());
+            return compiled.descriptorFor(rootPath)
+                    .orElseThrow(() -> new DescriptorLoadException(
+                            "Compiled schema id " + schemaId + " does not contain " + rootPath));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new DescriptorLoadException("Interrupted while loading schema id " + schemaId, e);
+        } catch (DescriptorLoadException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DescriptorLoadException("Could not load schema id " + schemaId + ": "
+                    + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * The id the registry has for a subject's latest version, which is what a serializer needs to
+     * stamp into a frame.
+     *
+     * <p>This looks an id up rather than registering one. A serializer that registers whatever it
+     * happens to hold can write a new schema version by accident, which is why registries are
+     * routinely deployed with auto-registration off; the id is something the schema's owner
+     * publishes, not something a producer decides.</p>
+     *
+     * @return the id, or empty when the subject is not registered
+     */
+    public java.util.OptionalInt idForSubject(String subject) throws DescriptorLoadException {
+        Objects.requireNonNull(subject, "subject");
+        String path = "/subjects/" + encode(subject) + "/versions/latest";
+        try {
+            JsonNode latest = getJson(path);
+            return latest.hasNonNull("id")
+                    ? java.util.OptionalInt.of(latest.path("id").asInt())
+                    : java.util.OptionalInt.empty();
+        } catch (RegistryHttpException e) {
+            if (e.statusCode() == 404) {
+                return java.util.OptionalInt.empty();
+            }
+            throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new DescriptorLoadException("Interrupted while looking up subject " + subject, e);
+        } catch (IOException e) {
+            throw new DescriptorLoadException("Could not look up subject " + subject + ": "
+                    + e.getMessage(), e);
         }
     }
 

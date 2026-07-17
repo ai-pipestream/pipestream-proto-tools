@@ -35,6 +35,7 @@ public class ProtoMoltProtobufDeserializer implements Deserializer<Message> {
     private Descriptor messageType;
     private List<Integer> indexPath;
     private boolean validateOnRead;
+    private SchemaIds schemaIds;
 
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {
@@ -46,6 +47,14 @@ public class ProtoMoltProtobufDeserializer implements Deserializer<Message> {
         indexPath = ConfluentWireFormat.indexPath(messageType);
         validateOnRead = config.getBoolean(ProtoMoltSerdeConfig.VALIDATE_ON_READ);
         validator = ProtoValidator.create();
+        schemaIds = SchemaIds.create(config.getString(ProtoMoltSerdeConfig.REGISTRY_URL));
+    }
+
+    @Override
+    public void close() {
+        if (schemaIds != null) {
+            schemaIds.close();
+        }
     }
 
     @Override
@@ -60,12 +69,13 @@ public class ProtoMoltProtobufDeserializer implements Deserializer<Message> {
                     + messageType.getFullName() + " at index " + indexPath
                     + "; the topic is carrying a type this consumer does not expect");
         }
+        Descriptor type = resolve(ConfluentWireFormat.schemaId(data), framedIndex);
         Message message;
         try {
-            message = DynamicMessage.parseFrom(messageType, ConfluentWireFormat.payload(data));
+            message = DynamicMessage.parseFrom(type, ConfluentWireFormat.payload(data));
         } catch (InvalidProtocolBufferException e) {
             throw new SerializationException("A record on " + topic + " is not a valid "
-                    + messageType.getFullName() + ": " + e.getMessage(), e);
+                    + type.getFullName() + ": " + e.getMessage(), e);
         }
         if (validateOnRead) {
             ValidationResult result = validator.validate(message);
@@ -75,6 +85,23 @@ public class ProtoMoltProtobufDeserializer implements Deserializer<Message> {
             }
         }
         return message;
+    }
+
+    /**
+     * The schema the frame's id names, when a registry can say, and the packaged one otherwise.
+     *
+     * <p>The registry is the better answer because it describes what the writer actually wrote,
+     * which is how a consumer follows a topic whose producers moved on. Falling back rather than
+     * failing keeps the registry a metadata service instead of a runtime dependency of every
+     * consumer: an unreachable registry should not stop a consumer whose packaged schema still
+     * reads the bytes in front of it.</p>
+     */
+    private Descriptor resolve(int schemaId, List<Integer> framedIndex) {
+        if (schemaIds == null) {
+            return messageType;
+        }
+        Descriptor resolved = schemaIds.messageFor(schemaId, framedIndex);
+        return resolved != null ? resolved : messageType;
     }
 
     private static String describe(ValidationResult result) {
