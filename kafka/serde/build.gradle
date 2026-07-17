@@ -13,6 +13,7 @@ dependencies {
     implementation project(':protomolt-schema-confluent')
     implementation project(':protomolt-protobuf-validation')
     implementation project(':protomolt-protobuf-metadata')
+    implementation project(':protomolt-protobuf-quality')
 
     testImplementation libs.kafka.clients
     testImplementation project(':protomolt-proto-sources')

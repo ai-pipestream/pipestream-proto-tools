@@ -2,10 +2,12 @@ package ai.pipestream.proto.kafka.serde.micrometer;
 
 import ai.pipestream.proto.kafka.serde.SerdeMetricsListener;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Metrics;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * The serde's metrics events as Micrometer counters. Put this module on the classpath and every
@@ -29,6 +31,12 @@ import java.util.List;
  *   <li>{@code protomolt.serde.refusals} (topic, reason) — records refused on type identity</li>
  *   <li>{@code protomolt.serde.registry.fallbacks} — registry lookups the packaged descriptor
  *       set had to answer instead (per failed lookup, not per record)</li>
+ *   <li>{@code protomolt.serde.quality.score} (topic, type) — distribution of composite quality
+ *       scores, per the schema's declared dimensions</li>
+ *   <li>{@code protomolt.serde.quality.dimension} (topic, type, dimension) — the same, per
+ *       dimension</li>
+ *   <li>{@code protomolt.serde.quality.rejections} (topic, type) — writes refused for scoring
+ *       below the configured quality floor</li>
  * </ul>
  *
  * <p>Tag cardinality is bounded by design: topics and types are the deployment's own, reasons
@@ -92,6 +100,37 @@ public final class MicrometerSerdeMetrics implements SerdeMetricsListener {
     public void onRegistryFallback() {
         Counter.builder("protomolt.serde.registry.fallbacks")
                 .description("Registry lookups answered by the packaged descriptor set instead")
+                .register(registry)
+                .increment();
+    }
+
+    @Override
+    public void onQualityScored(String topic, String type, double composite,
+                                Map<String, Double> dimensions) {
+        DistributionSummary.builder("protomolt.serde.quality.score")
+                .description("Composite quality score of records, per the schema's declared "
+                        + "dimensions")
+                .tag("topic", topic)
+                .tag("type", type)
+                .register(registry)
+                .record(composite);
+        for (Map.Entry<String, Double> dimension : dimensions.entrySet()) {
+            DistributionSummary.builder("protomolt.serde.quality.dimension")
+                    .description("Per-dimension quality scores")
+                    .tag("topic", topic)
+                    .tag("type", type)
+                    .tag("dimension", dimension.getKey())
+                    .register(registry)
+                    .record(dimension.getValue());
+        }
+    }
+
+    @Override
+    public void onQualityRejected(String topic, String type, double composite) {
+        Counter.builder("protomolt.serde.quality.rejections")
+                .description("Writes refused for scoring below the configured quality floor")
+                .tag("topic", topic)
+                .tag("type", type)
                 .register(registry)
                 .increment();
     }

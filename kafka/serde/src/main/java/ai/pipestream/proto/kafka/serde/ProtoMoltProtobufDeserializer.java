@@ -43,9 +43,11 @@ import java.util.stream.Collectors;
 public class ProtoMoltProtobufDeserializer implements Deserializer<Message> {
 
     private ProtoValidator validator;
+    private ai.pipestream.proto.quality.QualityScorer quality;
     private Descriptor pinnedType;
     private List<Integer> pinnedIndexPath;
     private boolean validateOnRead;
+    private boolean qualityOnRead;
     private SchemaIds schemaIds;
     private GeneratedMessages generated;
     private SerdeMetricsListener metrics;
@@ -67,7 +69,9 @@ public class ProtoMoltProtobufDeserializer implements Deserializer<Message> {
         pinnedType = pinned != null ? SerdeDescriptors.messageType(files, pinned) : null;
         pinnedIndexPath = pinnedType != null ? ConfluentWireFormat.indexPath(pinnedType) : null;
         validateOnRead = config.getBoolean(ProtoMoltSerdeConfig.VALIDATE_ON_READ);
+        qualityOnRead = config.getBoolean(ProtoMoltSerdeConfig.QUALITY_ON_READ);
         validator = ProtoValidator.create();
+        quality = ai.pipestream.proto.quality.QualityScorer.create();
         generated = new GeneratedMessages(files,
                 config.getBoolean(ProtoMoltSerdeConfig.GENERATED_CLASSES),
                 getClass().getClassLoader());
@@ -102,6 +106,15 @@ public class ProtoMoltProtobufDeserializer implements Deserializer<Message> {
                                 .map(ValidationResult.Violation::ruleId).toList());
                 throw new SerializationException("A record on " + topic + " violates the schema's "
                         + "declared rules: " + describe(result));
+            }
+        }
+        if (qualityOnRead) {
+            // Measurement only: a consumer cannot improve what a producer already wrote, so
+            // quality never rejects on the read path.
+            ai.pipestream.proto.quality.QualityReport report = quality.score(message);
+            if (report.scored()) {
+                metrics.onQualityScored(topic, type.getFullName(), report.composite(),
+                        report.dimensions());
             }
         }
         metrics.onDeserialized(topic, type.getFullName());
