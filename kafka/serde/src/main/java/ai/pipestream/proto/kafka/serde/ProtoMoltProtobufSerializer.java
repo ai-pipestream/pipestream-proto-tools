@@ -43,9 +43,12 @@ public class ProtoMoltProtobufSerializer implements Serializer<Message> {
 
     private List<FileDescriptor> files;
     private ProtoValidator validator;
+    private ai.pipestream.proto.quality.QualityScorer quality;
     private Descriptor pinnedType;
     private int configuredSchemaId;
     private boolean validateOnWrite;
+    private boolean qualityOnWrite;
+    private Double qualityMin;
     private SchemaIds schemaIds;
     private String subjectOverride;
     private String subjectStrategy;
@@ -64,7 +67,10 @@ public class ProtoMoltProtobufSerializer implements Serializer<Message> {
         pinnedType = pinned != null ? SerdeDescriptors.messageType(files, pinned) : null;
         configuredSchemaId = config.getInt(ProtoMoltSerdeConfig.SCHEMA_ID);
         validateOnWrite = config.getBoolean(ProtoMoltSerdeConfig.VALIDATE_ON_WRITE);
+        qualityOnWrite = config.getBoolean(ProtoMoltSerdeConfig.QUALITY_ON_WRITE);
+        qualityMin = config.getDouble(ProtoMoltSerdeConfig.QUALITY_MIN);
         validator = ProtoValidator.create();
+        quality = ai.pipestream.proto.quality.QualityScorer.create();
         metrics = SerdeMetricsListeners.load(getClass().getClassLoader());
         schemaIds = SchemaIds.create(config.getString(ProtoMoltSerdeConfig.REGISTRY_URL),
                 config.getLong(ProtoMoltSerdeConfig.REGISTRY_RETRY_BACKOFF_MS), metrics);
@@ -87,8 +93,11 @@ public class ProtoMoltProtobufSerializer implements Serializer<Message> {
         }
         Descriptor packaged = packagedTypeFor(topic, data);
         byte[] payload = data.toByteArray();
+        Message contract = validateOnWrite || qualityOnWrite
+                ? asPackagedType(data, payload, packaged)
+                : null;
         if (validateOnWrite) {
-            ValidationResult result = validator.validate(asPackagedType(data, payload, packaged));
+            ValidationResult result = validator.validate(contract);
             if (!result.valid()) {
                 metrics.onValidationRejected(topic, packaged.getFullName(), true,
                         result.violations().stream()
@@ -96,6 +105,9 @@ public class ProtoMoltProtobufSerializer implements Serializer<Message> {
                 throw new SerializationException("Message violates the schema's declared rules, "
                         + "so it was not written to " + topic + ": " + describe(result));
             }
+        }
+        if (qualityOnWrite) {
+            measureQuality(topic, packaged, contract);
         }
         Frame frame = frameFor(topic, packaged);
         byte[] framed = ConfluentWireFormat.frame(frame.id(), frame.index(), payload);
@@ -129,6 +141,28 @@ public class ProtoMoltProtobufSerializer implements Serializer<Message> {
     /** Sentinel for types proven absent, since a ConcurrentMap cannot hold null. */
     private static final Descriptor MISSING =
             com.google.protobuf.Empty.getDescriptor();
+
+    /**
+     * Measures the message against the quality dimensions its schema declares and reports the
+     * scores. Quality is a measurement, not a gate — unless {@code protomolt.quality.min} is
+     * set, in which case a composite below the floor keeps the record off the topic, the same
+     * way a validation failure would.
+     */
+    private void measureQuality(String topic, Descriptor packaged, Message contract) {
+        ai.pipestream.proto.quality.QualityReport report = quality.score(contract);
+        if (!report.scored()) {
+            return;
+        }
+        metrics.onQualityScored(topic, packaged.getFullName(), report.composite(),
+                report.dimensions());
+        if (qualityMin != null && report.composite() < qualityMin) {
+            metrics.onQualityRejected(topic, packaged.getFullName(), report.composite());
+            throw new SerializationException(String.format(
+                    "Message scored %.3f against its schema's quality dimensions, below the "
+                            + "configured floor of %.3f, so it was not written to %s: %s",
+                    report.composite(), qualityMin, topic, report.dimensions()));
+        }
+    }
 
     /** A schema id and the message-index path within the schema that id names. */
     private record Frame(int id, List<Integer> index) {

@@ -70,6 +70,17 @@ final class SerdeMetricsListeners implements SerdeMetricsListener {
         each(SerdeMetricsListener::onRegistryFallback);
     }
 
+    @Override
+    public void onQualityScored(String topic, String type, double composite,
+                                java.util.Map<String, Double> dimensions) {
+        each(listener -> listener.onQualityScored(topic, type, composite, dimensions));
+    }
+
+    @Override
+    public void onQualityRejected(String topic, String type, double composite) {
+        each(listener -> listener.onQualityRejected(topic, type, composite));
+    }
+
     private void each(java.util.function.Consumer<SerdeMetricsListener> event) {
         for (SerdeMetricsListener listener : listeners) {
             try {

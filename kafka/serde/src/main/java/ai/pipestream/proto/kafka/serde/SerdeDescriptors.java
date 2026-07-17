@@ -62,6 +62,7 @@ final class SerdeDescriptors {
             ExtensionRegistry extensions = ExtensionRegistry.newInstance();
             ValidationResult.registerExtensions(extensions);
             DescriptorMetadata.registerExtensions(extensions);
+            ai.pipestream.proto.quality.QualityScorer.registerExtensions(extensions);
             return DescriptorMetadata.materializeJsonNames(
                     FileDescriptorSet.parseFrom(bytes, extensions));
         } catch (Exception e) {

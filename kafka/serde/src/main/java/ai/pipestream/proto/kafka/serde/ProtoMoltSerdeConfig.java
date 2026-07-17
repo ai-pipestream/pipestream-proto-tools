@@ -34,6 +34,12 @@ public final class ProtoMoltSerdeConfig extends AbstractConfig {
     public static final String VALIDATE_ON_WRITE = "protomolt.validate.on.write";
     /** Validate after reading, which catches producers that never went through this serde. */
     public static final String VALIDATE_ON_READ = "protomolt.validate.on.read";
+    /** Score quality dimensions the schema declares, before writing. */
+    public static final String QUALITY_ON_WRITE = "protomolt.quality.on.write";
+    /** Score quality dimensions after reading. */
+    public static final String QUALITY_ON_READ = "protomolt.quality.on.read";
+    /** Reject writes whose composite quality score falls below this. Unset means measure only. */
+    public static final String QUALITY_MIN = "protomolt.quality.min";
 
     public static final ConfigDef CONFIG_DEF = new ConfigDef()
             .define(DESCRIPTOR_SET_RESOURCE, ConfigDef.Type.STRING, null,
@@ -86,7 +92,19 @@ public final class ProtoMoltSerdeConfig extends AbstractConfig {
             .define(VALIDATE_ON_READ, ConfigDef.Type.BOOLEAN, false, ConfigDef.Importance.MEDIUM,
                     "Validate after deserializing. Off by default: a consumer usually cannot "
                             + "fix what a producer already wrote, so this is for topics whose "
-                            + "producers do not all go through this serde.");
+                            + "producers do not all go through this serde.")
+            .define(QUALITY_ON_WRITE, ConfigDef.Type.BOOLEAN, true, ConfigDef.Importance.MEDIUM,
+                    "Score messages against the quality dimensions their schema declares "
+                            + "(ai.pipestream.proto.quality.v1) before writing, reporting the "
+                            + "scores to the metrics listeners. Types declaring no dimensions "
+                            + "cost nothing.")
+            .define(QUALITY_ON_READ, ConfigDef.Type.BOOLEAN, false, ConfigDef.Importance.LOW,
+                    "Score after deserializing. Measurement only; reads are never rejected on "
+                            + "quality.")
+            .define(QUALITY_MIN, ConfigDef.Type.DOUBLE, null, ConfigDef.Importance.MEDIUM,
+                    "Reject writes whose composite quality score falls below this threshold "
+                            + "(0..1). Unset, quality is measured and reported but never "
+                            + "gates.");
 
     public ProtoMoltSerdeConfig(Map<?, ?> originals) {
         super(CONFIG_DEF, originals);

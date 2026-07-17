@@ -44,6 +44,17 @@ public class RecordingMetricsListener implements SerdeMetricsListener {
         EVENTS.add("fallback");
     }
 
+    @Override
+    public void onQualityScored(String topic, String type, double composite,
+                                java.util.Map<String, Double> dimensions) {
+        EVENTS.add(String.format("quality %s %s %.2f %s", topic, type, composite, dimensions));
+    }
+
+    @Override
+    public void onQualityRejected(String topic, String type, double composite) {
+        EVENTS.add(String.format("quality-rejected %s %s %.2f", topic, type, composite));
+    }
+
     /** Misbehaves on purpose; its existence is the exception-containment test. */
     public static class Hostile implements SerdeMetricsListener {
 

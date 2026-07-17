@@ -99,6 +99,8 @@ project(':protomolt-metadata').projectDir = file('mapper/metadata')
 include 'protomolt-protobuf-metadata'
 project(':protomolt-protobuf-metadata').projectDir = file('protobuf/metadata')
 
+include 'protomolt-protobuf-quality'
+project(':protomolt-protobuf-quality').projectDir = file('protobuf/quality')
 include 'protomolt-protobuf-validation'
 project(':protomolt-protobuf-validation').projectDir = file('protobuf/validation')
 

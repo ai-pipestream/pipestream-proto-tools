@@ -141,6 +141,9 @@ so the stamped id repairs itself without a restart.
 | `protomolt.generated.classes` | `true` | Return generated Java classes when they are on the classpath |
 | `protomolt.validate.on.write` | `true` | Reject invalid messages instead of writing them |
 | `protomolt.validate.on.read` | `false` | Validate after deserializing |
+| `protomolt.quality.on.write` | `true` | Score declared quality dimensions before writing |
+| `protomolt.quality.on.read` | `false` | Score after deserializing (measure only) |
+| `protomolt.quality.min` | unset | Reject writes whose composite score falls below this |
 
 Validating on read is off by default. A consumer usually cannot fix what a
 producer already wrote, and one that starts rejecting history on upgrade is
@@ -169,9 +172,19 @@ regression announcing itself — from inside the producer, with no sidecar and
 no extra pass over the data.
 
 Other metrics systems plug in the same way: implement `SerdeMetricsListener`
-(five methods, all defaulted) and register it via `META-INF/services`.
-Listeners observe, never participate — one that throws is logged once and
-costs no records.
+(all methods defaulted) and register it via `META-INF/services`. Listeners
+observe, never participate — one that throws is logged once and costs no
+records.
+
+## Quality scoring
+
+Schemas can declare [quality dimensions](quality.md) — CEL expressions
+returning scores — and the serializer measures every record against them by
+default (`protomolt.quality.on.write`), reporting composites and per-dimension
+scores through the same metrics listeners
+(`protomolt.serde.quality.score` / `.dimension` distributions in Micrometer).
+Types that declare no dimensions cost nothing. Set `protomolt.quality.min`
+to turn the measurement into a write-side gate; reads only ever measure.
 
 ## How this compares
 

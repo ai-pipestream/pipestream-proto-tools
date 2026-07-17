@@ -62,4 +62,20 @@ public interface SerdeMetricsListener {
      */
     default void onRegistryFallback() {
     }
+
+    /**
+     * A record measured against the quality dimensions its schema declares
+     * ({@code ai.pipestream.proto.quality.v1}). Reported whether or not the record proceeds.
+     *
+     * @param composite  weighted average of the scored dimensions, in {@code [0, 1]}
+     * @param dimensions score per dimension id; ids are the schema's own, so cardinality is
+     *                   bounded by what the schema declares
+     */
+    default void onQualityScored(String topic, String type, double composite,
+                                 java.util.Map<String, Double> dimensions) {
+    }
+
+    /** A write refused because its composite quality score fell below the configured floor. */
+    default void onQualityRejected(String topic, String type, double composite) {
+    }
 }

@@ -117,6 +117,8 @@ class MicrometerSerdeMetricsTest {
         metrics.onValidationRejected("t", "a.B", false, List.of("int32.gte", "string.min_len"));
         metrics.onTypeRefused("t", MicrometerSerdeMetrics.REASON_WRONG_TYPE);
         metrics.onRegistryFallback();
+        metrics.onQualityScored("t", "a.B", 0.625, Map.of("titled", 1.0));
+        metrics.onQualityRejected("t", "a.B", 0.075);
 
         assertThat(local.counter("protomolt.serde.records",
                 "direction", "write", "topic", "t", "type", "a.B").count()).isEqualTo(1.0);
@@ -129,5 +131,11 @@ class MicrometerSerdeMetricsTest {
         assertThat(local.counter("protomolt.serde.refusals",
                 "topic", "t", "reason", "wrong-type").count()).isEqualTo(1.0);
         assertThat(local.counter("protomolt.serde.registry.fallbacks").count()).isEqualTo(1.0);
+        assertThat(local.summary("protomolt.serde.quality.score",
+                "topic", "t", "type", "a.B").mean()).isEqualTo(0.625);
+        assertThat(local.summary("protomolt.serde.quality.dimension",
+                "topic", "t", "type", "a.B", "dimension", "titled").mean()).isEqualTo(1.0);
+        assertThat(local.counter("protomolt.serde.quality.rejections",
+                "topic", "t", "type", "a.B").count()).isEqualTo(1.0);
     }
 }
