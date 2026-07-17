@@ -13,6 +13,8 @@ import org.apache.kafka.common.serialization.Serializer;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
 /**
@@ -32,8 +34,12 @@ public class ProtoMoltProtobufSerializer implements Serializer<Message> {
     private ProtoValidator validator;
     private Descriptor messageType;
     private List<Integer> indexPath;
-    private int schemaId;
+    private int configuredSchemaId;
     private boolean validateOnWrite;
+    private SchemaIds schemaIds;
+    private String subject;
+    private boolean isKey;
+    private final ConcurrentMap<String, Integer> idsByTopic = new ConcurrentHashMap<>();
 
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {
@@ -42,9 +48,32 @@ public class ProtoMoltProtobufSerializer implements Serializer<Message> {
         messageType = SerdeDescriptors.messageType(files, config.getString(
                 ProtoMoltSerdeConfig.MESSAGE_TYPE));
         indexPath = ConfluentWireFormat.indexPath(messageType);
-        schemaId = config.getInt(ProtoMoltSerdeConfig.SCHEMA_ID);
+        configuredSchemaId = config.getInt(ProtoMoltSerdeConfig.SCHEMA_ID);
         validateOnWrite = config.getBoolean(ProtoMoltSerdeConfig.VALIDATE_ON_WRITE);
         validator = ProtoValidator.create();
+        schemaIds = SchemaIds.create(config.getString(ProtoMoltSerdeConfig.REGISTRY_URL));
+        subject = config.getString(ProtoMoltSerdeConfig.SUBJECT);
+        this.isKey = isKey;
+    }
+
+    /**
+     * The id to stamp: the registry's, when it has one for this subject, and the configured one
+     * otherwise. Looked up once per topic, since a subject's latest id is not per-record news.
+     */
+    private int schemaIdFor(String topic) {
+        if (schemaIds == null) {
+            return configuredSchemaId;
+        }
+        return idsByTopic.computeIfAbsent(topic, name -> schemaIds
+                .idForSubject(subject != null ? subject : Subjects.of(name, isKey))
+                .orElse(configuredSchemaId));
+    }
+
+    @Override
+    public void close() {
+        if (schemaIds != null) {
+            schemaIds.close();
+        }
     }
 
     @Override
@@ -65,7 +94,7 @@ public class ProtoMoltProtobufSerializer implements Serializer<Message> {
                         + "so it was not written to " + topic + ": " + describe(result));
             }
         }
-        return ConfluentWireFormat.frame(schemaId, indexPath, payload);
+        return ConfluentWireFormat.frame(schemaIdFor(topic), indexPath, payload);
     }
 
     /**

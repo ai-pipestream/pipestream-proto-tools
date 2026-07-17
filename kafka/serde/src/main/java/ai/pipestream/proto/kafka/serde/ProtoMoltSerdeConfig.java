@@ -20,6 +20,10 @@ public final class ProtoMoltSerdeConfig extends AbstractConfig {
     public static final String MESSAGE_TYPE = "protomolt.message.type";
     /** The schema id to stamp into the frame. */
     public static final String SCHEMA_ID = "protomolt.schema.id";
+    /** A Confluent-compatible registry, if there is one. Without it the descriptor set stands alone. */
+    public static final String REGISTRY_URL = "protomolt.registry.url";
+    /** Overrides the default {@code <topic>-value} / {@code <topic>-key} subject. */
+    public static final String SUBJECT = "protomolt.subject";
     /** Validate before writing, so invalid data never reaches the topic. */
     public static final String VALIDATE_ON_WRITE = "protomolt.validate.on.write";
     /** Validate after reading, which catches producers that never went through this serde. */
@@ -39,6 +43,14 @@ public final class ProtoMoltSerdeConfig extends AbstractConfig {
             .define(SCHEMA_ID, ConfigDef.Type.INT, 0, ConfigDef.Importance.MEDIUM,
                     "Schema id written into the frame. Readers that resolve the type from "
                             + "configuration ignore it; a Confluent registry would assign it.")
+            .define(REGISTRY_URL, ConfigDef.Type.STRING, null, ConfigDef.Importance.MEDIUM,
+                    "Base URL of a Confluent-compatible registry, e.g. http://localhost:8081. "
+                            + "When set, the id is looked up by subject on write and the schema "
+                            + "is resolved by id on read; when the registry cannot answer, the "
+                            + "packaged descriptor set is used instead of failing.")
+            .define(SUBJECT, ConfigDef.Type.STRING, null, ConfigDef.Importance.LOW,
+                    "Subject to look the id up under. Defaults to <topic>-value, or <topic>-key "
+                            + "for a key serde.")
             .define(VALIDATE_ON_WRITE, ConfigDef.Type.BOOLEAN, true, ConfigDef.Importance.HIGH,
                     "Validate against the schema's declared rules before serializing. Invalid "
                             + "messages are rejected rather than written.")
