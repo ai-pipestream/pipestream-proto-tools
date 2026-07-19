@@ -1,0 +1,15 @@
+plugins {
+    alias(libs.plugins.protobuf)
+}
+
+description = 'The pipeline schema: chained gRPC calls, projections, and CEL steps as one protobuf message'
+
+dependencies {
+    api libs.protobuf.java
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:4.35.1"
+    }
+}

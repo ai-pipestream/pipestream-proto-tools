@@ -35,6 +35,7 @@ prefix; Java packages use the `ai.pipestream.proto.*` namespace (see
 | `shapes/` | `shapes` | Joins, unions, and derived shapes: multi-source mapping scopes, runtime message-type synthesis (envelope, projection, tagged union), schema merging with clash resolution, and struct-to-proto inference |
 | `mapper/` | `mapper-core`, `mapper-cel`, `metadata` | Text mapping rules, CEL filters and selectors, CEL-driven metadata extraction |
 | `projection/` | `projection` | Self-describing message-to-message projections: per-field provenance (candidate paths, CEL, literals) carried as descriptor options on the target message, so one target can join differently-shaped sources |
+| `pipeline/` | `pipeline` | The pipeline schema: chained gRPC calls, projections, and CEL steps as one protobuf message |
 | `protobuf/` | `protobuf-metadata`, `protobuf-validation`, `protobuf-validation-protovalidate`, `protobuf-validation-conformance`, `protobuf-indexing` | Descriptor-option standards for metadata, validation, and indexing; protovalidate dialect and conformance harness |
 | `schema/` | `schema-apicurio`, `schema-confluent` | Descriptor loaders and schema publishers for Apicurio Registry and Confluent-compatible schema registries |
 | `index/` | `index-spi`, `index-ndjson`, `index-lucene`, `index-opensearch`, `index-solr` | Indexing plans and hints; NDJSON output; engine plugins |

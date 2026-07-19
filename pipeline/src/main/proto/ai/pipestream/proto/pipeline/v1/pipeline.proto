@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package ai.pipestream.proto.pipeline.v1;
+
+option java_multiple_files = true;
+option java_package = "ai.pipestream.proto.pipeline";
+option java_outer_classname = "PipelineProto";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+
+// A chain of steps that hands a stream of protobuf messages from one step to
+// the next. Steps run in order, in one process, with nothing saved in between.
+message Pipeline {
+  string name = 1;
+  string description = 2;
+  // Fully-qualified message type the flow starts from.
+  string input_type = 3;
+  // Constants available to CEL steps as `vars.<name>`.
+  map<string, google.protobuf.Value> vars = 4;
+  repeated Step steps = 5;
+}
+
+// Where a gRPC service lives. Its schema comes from server reflection.
+message Endpoint {
+  string host = 1;
+  int32 port = 2;
+  bool plaintext = 3;
+}
+
+message Step {
+  // Labels the step in errors and in the run record.
+  string name = 1;
+  oneof kind {
+    GrpcCall grpc_call = 2;
+    CelFilter cel_filter = 3;
+    CelSelect cel_select = 4;
+    Project project = 5;
+    Unnest unnest = 6;
+    Collect collect = 7;
+    Let let = 8;
+  }
+}
+
+// Calls a method on any gRPC service. The call shape follows the method's own
+// streaming flags: a unary method over a stream runs once per element, a
+// client-streaming method consumes the flow as its request stream, and
+// server-streaming or bidi responses become the new flow.
+message GrpcCall {
+  Endpoint endpoint = 1;
+  // Fully-qualified service name, e.g. "acme.search.v1.SearchService".
+  string service = 2;
+  string method = 3;
+  oneof request {
+    // Constant request payload.
+    google.protobuf.Value input = 4;
+    // CEL that builds the request from the flow message (`input`) and `vars`.
+    string input_cel = 5;
+  }
+}
+
+// Keeps the flow messages where the condition holds.
+message CelFilter {
+  // Boolean CEL over `input`.
+  string condition = 1;
+}
+
+// Replaces each flow message with the result of the expression.
+message CelSelect {
+  string expression = 1;
+}
+
+// Maps each flow message through a protomolt-projection target. The flow type
+// must be one of the target's declared sources.
+message Project {
+  string target_type = 1;
+}
+
+// Turns a repeated field of the flow message into a stream of its elements.
+message Unnest {
+  string path = 1;
+}
+
+// Collapses the stream into a single list value, for steps that need the
+// whole set at once (rerank).
+message Collect {
+}
+
+// Binds a CEL value as `vars.<name>` for later steps. The flow is unchanged.
+message Let {
+  string name = 1;
+  string cel = 2;
+}
+
+// What happened in one run. Returned to the caller; persisted when the
+// pipeline itself is stored.
+message RunRecord {
+  string pipeline = 1;
+  string input_type = 2;
+  string output_type = 3;
+  bool ok = 4;
+  repeated StepRecord steps = 5;
+}
+
+message StepRecord {
+  string name = 1;
+  int32 index = 2;
+  google.protobuf.Duration elapsed = 3;
+  int64 messages_in = 4;
+  int64 messages_out = 5;
+  string error = 6;
+}

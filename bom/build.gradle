@@ -39,6 +39,7 @@ def supportedModules = [
         'protomolt-mapper-core',
         'protomolt-mapper-cel',
         'protomolt-projection',
+        'protomolt-pipeline',
         'protomolt-schema-apicurio',
         'protomolt-schema-apicurio-deployment',
         'protomolt-schema-confluent',
