@@ -225,6 +225,27 @@ class GrpcStreamSourceTest {
     }
 
     @Test
+    void closeDuringActiveInflowTerminatesOnceAndJoins() throws Exception {
+        watchEmitted.set(0);
+        RecordingListener listener = new RecordingListener();
+        StreamSource.Handle handle = new GrpcStreamSource().open(plan("Watch", 0), listener);
+
+        Message first = listener.messages.poll(5, TimeUnit.SECONDS);
+        assertThat(first).as("the watch produces").isNotNull();
+
+        // No pause: the pump thread is mid-take or mid-batch when close lands. close()
+        // must still join the thread promptly and fire exactly one terminal signal.
+        long start = System.nanoTime();
+        handle.close();
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+        assertThat(elapsedMs).as("close joins promptly").isLessThan(6_000);
+        assertThat(listener.terminal.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(listener.terminals.get()).as("exactly one terminal signal").isEqualTo(1);
+        assertThat(watchCancelled.await(5, TimeUnit.SECONDS))
+                .as("the server sees the cancellation").isTrue();
+    }
+
+    @Test
     void failureSurfacesAfterPriorMessagesDrain() throws Exception {
         SourcePump pump = new SourcePump(8);
         pump.attach(new GrpcStreamSource().open(plan("Fail", 0), pump));

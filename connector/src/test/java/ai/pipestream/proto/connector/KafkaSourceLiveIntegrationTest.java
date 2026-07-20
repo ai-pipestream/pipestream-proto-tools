@@ -1,7 +1,11 @@
 package ai.pipestream.proto.connector;
 
 import com.google.protobuf.BytesValue;
+import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Message;
+import ai.pipestream.proto.sources.CompiledProtos;
+import ai.pipestream.proto.sources.ProtoSourceCompiler;
+import ai.pipestream.proto.sources.ProtoSourceSet;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -23,6 +27,7 @@ import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The Kafka source against a genuine broker: records arrive in order through the pump,
@@ -124,6 +129,46 @@ class KafkaSourceLiveIntegrationTest {
                 assertThat(next).as("record %d arrives after resume", i).isNotNull();
                 assertThat(payloadOf(next)).isEqualTo("value-" + i);
             }
+        } finally {
+            pump.close();
+        }
+    }
+
+    @Test
+    void unparseableRecordFailsWithTopicPartitionOffset() throws Exception {
+        String topic = unique("connector-it-bad");
+        createTopic(topic);
+
+        // One record whose payload is not a valid message of the plan's type.
+        Properties config = new Properties();
+        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap());
+        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class);
+        config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class);
+        try (KafkaProducer<byte[], byte[]> producer = new KafkaProducer<>(config)) {
+            producer.send(new ProducerRecord<>(topic, "not-a-proto-payload"
+                    .getBytes(StandardCharsets.UTF_8))).get(10, TimeUnit.SECONDS);
+        }
+
+        CompiledProtos compiled = new ProtoSourceCompiler().compile(ProtoSourceSet.builder()
+                .add("connector/it/ping.proto", """
+                        syntax = "proto3";
+                        package connector.it;
+                        message Ping { int32 seq = 1; }
+                        """, "test").build());
+        Descriptor ping = compiled.descriptorFor("connector/it/ping.proto").orElseThrow()
+                .findMessageTypeByName("Ping");
+
+        KafkaSourcePlan plan = new KafkaSourcePlan(bootstrap(), topic, unique("connector-it-group"),
+                MessageParser.forType(ping), Map.of(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest"));
+        SourcePump pump = new SourcePump(4);
+        pump.attach(new KafkaSource().open(plan, pump));
+        try {
+            assertThatThrownBy(() -> pump.take(Duration.ofSeconds(15)))
+                    .isInstanceOf(SourceException.class)
+                    .hasMessageContaining(topic)
+                    .hasMessageContaining(":0@0")
+                    .cause().hasMessageContaining("not a valid connector.it.Ping");
+            assertThat(pump.isCompleted()).as("a failure is not a completion").isFalse();
         } finally {
             pump.close();
         }
