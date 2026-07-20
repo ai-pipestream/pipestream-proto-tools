@@ -20,6 +20,8 @@ dependencies {
     implementation libs.quarkus.arc
     implementation libs.slf4j.api
 
+    testImplementation libs.testcontainers.junit.jupiter
+
     annotationProcessor platform(libs.quarkus.bom)
     annotationProcessor 'io.quarkus:quarkus-extension-processor'
 }
@@ -28,7 +30,8 @@ tasks.matching { it.name == 'validateExtension' }.configureEach {
     enabled = false
 }
 
-// Forward integration-test endpoint overrides (see README "Integration tests") to the test JVM.
+// Forward the integration-test endpoint override (see docs/building.md "Integration tests")
+// to the test JVM. Without an override the suites use their Testcontainers registry.
 tasks.withType(Test).configureEach {
     def apicurioUrl = providers.systemProperty('pipestream.it.apicurio.url')
     if (apicurioUrl.isPresent()) {

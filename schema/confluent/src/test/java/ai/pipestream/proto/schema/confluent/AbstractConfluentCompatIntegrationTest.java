@@ -33,11 +33,12 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Integration tests for the two Confluent-compatible loaders against a live registry, run once
  * per endpoint via the concrete subclasses.
  *
- * <p>{@link ConfluentSchemaRegistryIntegrationTest} provisions its own registry (a Testcontainers
- * Redpanda serving the Confluent Schema Registry API) and skips when Docker is unavailable.
- * {@link ApicurioCcompatIntegrationTest} needs the compose stack ({@code docker compose -f
- * docker-compose.integration.yml up -d}, repo root) and skips via a JUnit assumption when the
- * registry is not reachable.</p>
+ * <p>Both concrete subclasses provision their own registry and skip when Docker is
+ * unavailable: {@link ConfluentSchemaRegistryIntegrationTest} a Testcontainers Redpanda
+ * serving the Confluent Schema Registry API, {@link ApicurioCcompatIntegrationTest} a
+ * Testcontainers Apicurio Registry (its ccompat v7 facade). The Apicurio lane still honors
+ * an endpoint override and skips via a JUnit assumption when the overridden registry is not
+ * reachable.</p>
  *
  * <p>Two loaders, two protocols: {@link ConfluentSchemaRegistryLoader} speaks the Schema
  * Registry subjects REST API (schema text + references, compiled to descriptors at load time),

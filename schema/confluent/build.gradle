@@ -12,8 +12,8 @@ dependencies {
 }
 
 // Forward the Apicurio integration-test endpoint override (see docs/building.md
-// "Integration tests") to the test JVM. The Confluent lanes self-provision a Redpanda
-// Testcontainer and take no endpoint override.
+// "Integration tests") to the test JVM. All lanes self-provision Testcontainers
+// registries; the override only retargets the Apicurio ccompat lanes.
 tasks.withType(Test).configureEach {
     def value = providers.systemProperty('pipestream.it.apicurio.url')
     if (value.isPresent()) {

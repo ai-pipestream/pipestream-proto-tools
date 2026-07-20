@@ -16,6 +16,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.IOException;
 import java.net.URI;
@@ -34,19 +36,24 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Integration tests for {@link ApicurioSchemaPublisher} against a live Apicurio Registry 3.x
  * (native v3 API), mirroring {@link ApicurioDescriptorLoaderIntegrationTest}.
  *
- * <p>Start the registry with {@code docker compose -f docker-compose.integration.yml up -d}
- * (repo root). When the registry is not reachable these tests skip via JUnit assumptions, so
+ * <p>The suite provisions its own registry, a Testcontainers Apicurio Registry (see
+ * {@link ApicurioRegistryContainer}), and skips when Docker is unavailable, so
  * {@code ./gradlew build} stays green without containers.</p>
  *
- * <p>Endpoint override: {@code -Dpipestream.it.apicurio.url=...} or env
- * {@code PIPESTREAM_IT_APICURIO_URL} (default {@code http://localhost:18780}).</p>
+ * <p>To run against an external registry instead (for example the compose stack's):
+ * {@code -Dpipestream.it.apicurio.url=...} or env {@code PIPESTREAM_IT_APICURIO_URL}.
+ * An unreachable override endpoint still skips via a JUnit assumption.</p>
  *
  * <p>Artifacts are registered under unique per-run groups so reruns never collide. The shared
  * registry has deletion disabled (HTTP 405), so no cleanup is attempted.</p>
  */
 @Tag("integration")
+@Testcontainers(disabledWithoutDocker = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ApicurioSchemaPublisherIntegrationTest {
+
+    @Container
+    static final ApicurioRegistryContainer REGISTRY = new ApicurioRegistryContainer();
 
     private static final String COMMON_PROTO = """
             syntax = "proto3";
@@ -79,7 +86,8 @@ class ApicurioSchemaPublisherIntegrationTest {
             }
             """;
 
-    private final String registryUrl = ApicurioDescriptorLoaderIntegrationTest.configuredRegistryUrl();
+    // Resolved in setUp: the container's mapped port only exists once it has started.
+    private String registryUrl;
     private final String runId = UUID.randomUUID().toString().substring(0, 8);
     private final String groupId = "pipestream-it-pub-" + runId;
     private final String dryRunGroupId = "pipestream-it-pub-dry-" + runId;
@@ -90,6 +98,7 @@ class ApicurioSchemaPublisherIntegrationTest {
     @BeforeAll
     void setUp() {
         http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+        registryUrl = ApicurioDescriptorLoaderIntegrationTest.configuredRegistryUrl(REGISTRY.getUrl());
         assumeTrue(registryReachable(),
                 "Apicurio Registry not reachable at " + registryUrl + " - skipping integration tests");
         registryClient = RegistryClientFactory.create(RegistryClientOptions.create(registryUrl));

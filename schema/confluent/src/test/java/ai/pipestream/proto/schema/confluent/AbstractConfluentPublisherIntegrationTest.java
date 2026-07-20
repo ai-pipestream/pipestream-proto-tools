@@ -32,11 +32,12 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * registry, run once per endpoint via the concrete subclasses, mirroring
  * {@link AbstractConfluentCompatIntegrationTest}.
  *
- * <p>{@link ConfluentSchemaRegistryPublisherIntegrationTest} provisions its own registry (a
- * Testcontainers Redpanda serving the Confluent Schema Registry API) and skips when Docker is
- * unavailable. {@link ApicurioCcompatPublisherIntegrationTest} needs the compose stack
- * ({@code docker compose -f docker-compose.integration.yml up -d}, repo root) and skips via a
- * JUnit assumption when the registry is not reachable.</p>
+ * <p>Both concrete subclasses provision their own registry and skip when Docker is
+ * unavailable: {@link ConfluentSchemaRegistryPublisherIntegrationTest} a Testcontainers
+ * Redpanda serving the Confluent Schema Registry API,
+ * {@link ApicurioCcompatPublisherIntegrationTest} a Testcontainers Apicurio Registry (its
+ * ccompat v7 facade). The Apicurio lane still honors an endpoint override and skips via a
+ * JUnit assumption when the overridden registry is not reachable.</p>
  *
  * <p>Subjects are registered under unique per-run prefixes so reruns never collide; a
  * best-effort cleanup deletes them afterwards.</p>
