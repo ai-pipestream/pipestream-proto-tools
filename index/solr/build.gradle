@@ -5,4 +5,6 @@ dependencies {
     api project(':protomolt-mapper-core')
 
     testImplementation libs.jackson.databind
+    testImplementation libs.testcontainers.solr
+    testImplementation libs.testcontainers.junit.jupiter
 }

@@ -21,6 +21,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.solr.SolrContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -32,22 +36,26 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * The generated Solr schema against a live Solr: every add-field-type / add-field /
  * add-copy-field the generator emits must be accepted by the Schema API, and documents
  * mapped from dynamic messages must index and answer analyzed, sorted, faceted, and kNN
- * queries. Start the engine with {@code docker compose -f docker-compose.integration.yml up -d}
- * (repo root); without it these tests skip.
+ * queries. The engine is a Testcontainers Solr instance; the suite skips when Docker is
+ * unavailable.
  */
 @Tag("integration")
+@Testcontainers(disabledWithoutDocker = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SolrLiveIntegrationTest {
 
-    private static final String BASE = System.getProperty(
-            "protomolt.it.solr", "http://localhost:18983/solr");
+    // The module has no no-arg constructor and no default tag; solr:9 matches the version
+    // the compose lane pins (DenseVectorField and the knn parser need the 9.x line).
+    @Container
+    static final SolrContainer SOLR = new SolrContainer(DockerImageName.parse("solr:9"))
+            .withCollection("protomolt");
+
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(3))
@@ -59,9 +67,8 @@ class SolrLiveIntegrationTest {
 
     @BeforeAll
     static void createCore() throws Exception {
-        assumeTrue(reachable(), "Solr not reachable at " + BASE + "; skipping");
-        // Standalone Solr cannot copy a configset over the core-admin API, so the compose
-        // file precreates this core; schema application below is idempotent across runs.
+        // withCollection precreates this core (solr create -c) at startup; schema
+        // application below is idempotent across runs.
         core = "protomolt";
 
         descriptor = bookDescriptor();
@@ -86,14 +93,8 @@ class SolrLiveIntegrationTest {
                                 .build())));
     }
 
-    private static boolean reachable() {
-        try {
-            return HTTP.send(HttpRequest.newBuilder(URI.create(BASE + "/admin/info/system"))
-                            .timeout(Duration.ofSeconds(3)).GET().build(),
-                    HttpResponse.BodyHandlers.discarding()).statusCode() == 200;
-        } catch (Exception e) {
-            return false;
-        }
+    private static String base() {
+        return "http://" + SOLR.getHost() + ":" + SOLR.getSolrPort() + "/solr";
     }
 
     private static JsonNode post(String path, Object body) throws Exception {
@@ -102,7 +103,7 @@ class SolrLiveIntegrationTest {
 
     private static JsonNode post(String path, Object body, boolean allowAlreadyExists)
             throws Exception {
-        HttpResponse<String> response = HTTP.send(HttpRequest.newBuilder(URI.create(BASE + path))
+        HttpResponse<String> response = HTTP.send(HttpRequest.newBuilder(URI.create(base() + path))
                         .header("content-type", "application/json")
                         .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body)))
                         .build(),
@@ -122,7 +123,7 @@ class SolrLiveIntegrationTest {
     }
 
     private static JsonNode get(String path) throws Exception {
-        HttpResponse<String> response = HTTP.send(HttpRequest.newBuilder(URI.create(BASE + path))
+        HttpResponse<String> response = HTTP.send(HttpRequest.newBuilder(URI.create(base() + path))
                 .GET().build(), HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).as("%s: %s", path, response.body()).isEqualTo(200);
         return JSON.readTree(response.body());
