@@ -6,14 +6,17 @@ dependencies {
     // Confluent Schema Registry subjects API support: JSON responses + shared .proto compilation.
     implementation project(':protomolt-proto-sources')
     implementation libs.jackson.databind
+
+    testImplementation libs.testcontainers.redpanda
+    testImplementation libs.testcontainers.junit.jupiter
 }
 
-// Forward integration-test endpoint overrides (see README "Integration tests") to the test JVM.
+// Forward the Apicurio integration-test endpoint override (see docs/building.md
+// "Integration tests") to the test JVM. The Confluent lanes self-provision a Redpanda
+// Testcontainer and take no endpoint override.
 tasks.withType(Test).configureEach {
-    ['pipestream.it.apicurio.url', 'pipestream.it.confluent.url'].each { name ->
-        def value = providers.systemProperty(name)
-        if (value.isPresent()) {
-            systemProperty name, value.get()
-        }
+    def value = providers.systemProperty('pipestream.it.apicurio.url')
+    if (value.isPresent()) {
+        systemProperty 'pipestream.it.apicurio.url', value.get()
     }
 }

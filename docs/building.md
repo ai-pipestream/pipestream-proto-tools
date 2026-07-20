@@ -52,7 +52,13 @@ requests.
 The schema-registry loader modules include integration tests (JUnit
 `@Tag("integration")`) that exercise real registries: Apicurio Registry's
 native v3 API, and the Confluent subjects API against both Apicurio's
-ccompat facade and a genuine Confluent Schema Registry.
+ccompat facade and a Redpanda container.
+
+The Confluent lanes (the `:protomolt-schema-confluent` Confluent suites and
+the `:protomolt-serde` registry suite) provision their own registry: a
+Testcontainers Redpanda, which serves the Confluent Schema Registry API.
+They run wherever Docker is available and skip otherwise. The Apicurio
+lanes need the compose stack:
 
 ```shell
 docker compose -f docker-compose.integration.yml up -d
@@ -61,18 +67,17 @@ docker compose -f docker-compose.integration.yml up -d
           :protomolt-schema-confluent:test
 ```
 
-When a registry is not reachable (a quick ~2 second probe), the tests skip
-via JUnit assumptions, so a plain `./gradlew build` stays green without
-containers. Test artifacts and subjects use unique per-run names, so reruns
-against a long-lived registry never collide.
+When a compose registry is not reachable (a quick ~2 second probe), the
+Apicurio tests skip via JUnit assumptions, so a plain `./gradlew build`
+stays green without containers. Test artifacts and subjects use unique
+per-run names, so reruns against a long-lived registry never collide.
 
-Default endpoints match `docker-compose.integration.yml` and can be
-overridden with system properties or environment variables:
+The Apicurio endpoint matches `docker-compose.integration.yml` and can be
+overridden with a system property or environment variable:
 
 | Property | Environment variable | Default |
 |---|---|---|
 | `pipestream.it.apicurio.url` | `PIPESTREAM_IT_APICURIO_URL` | `http://localhost:18780` |
-| `pipestream.it.confluent.url` | `PIPESTREAM_IT_CONFLUENT_URL` | `http://localhost:18781` |
 
 ```shell
 ./gradlew :protomolt-schema-apicurio:test \

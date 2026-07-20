@@ -8,6 +8,10 @@ import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Message;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.redpanda.RedpandaContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -18,25 +22,27 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * The id lane against a genuine Confluent Schema Registry: a serializer stamps the id the registry
- * actually holds for its subject, and a deserializer resolves a frame's id back to the registry's
- * schema.
+ * The id lane against a genuine Confluent-compatible Schema Registry: a serializer stamps the id
+ * the registry actually holds for its subject, and a deserializer resolves a frame's id back to
+ * the registry's schema.
  *
  * <p>The registered schema is deliberately a superset of the packaged one, carrying a field the
  * deployment's descriptor set has never heard of. That is what makes the assertion mean something:
  * if the resolved descriptor knows {@code note}, it came from the registry, and if it does not,
  * the deserializer quietly fell back to what it had packaged and the lane is not working.</p>
  *
- * <p>Skips when the registry is not running; CI runs it with the stack up and fails if it
- * skipped.</p>
+ * <p>The registry is a Testcontainers Redpanda, which serves the Confluent Schema Registry API;
+ * the suite skips when Docker is unavailable.</p>
  */
+@Testcontainers(disabledWithoutDocker = true)
 class SerdeRegistryLiveIntegrationTest {
 
-    private static final String REGISTRY = System.getProperty(
-            "protomolt.it.confluent", "http://127.0.0.1:18781");
+    // Same baseline image as the connector lane (testcontainers' own pinned tag).
+    @Container
+    static final RedpandaContainer REGISTRY = new RedpandaContainer(
+            DockerImageName.parse("docker.redpanda.com/redpandadata/redpanda:v22.2.1"));
 
     /** What the deployment packages: no `note`. */
     private static final String PACKAGED = """
@@ -68,8 +74,6 @@ class SerdeRegistryLiveIntegrationTest {
 
     @BeforeAll
     static void setUp() throws Exception {
-        assumeTrue(reachable(), "Confluent Schema Registry not reachable at " + REGISTRY
-                + "; start docker-compose.integration.yml to run this suite");
         CompiledProtos compiled = new ProtoSourceCompiler().compile(ProtoSourceSet.builder()
                 .add("serde/it/v1/order.proto", PACKAGED, "test").build());
         descriptorSetBase64 = Base64.getEncoder()
@@ -82,20 +86,15 @@ class SerdeRegistryLiveIntegrationTest {
         registeredId = register(subject, REGISTERED);
     }
 
-    private static boolean reachable() {
-        try (HttpClient http = HttpClient.newHttpClient()) {
-            return http.send(HttpRequest.newBuilder(URI.create(REGISTRY + "/subjects")).GET().build(),
-                    HttpResponse.BodyHandlers.discarding()).statusCode() == 200;
-        } catch (Exception e) {
-            return false;
-        }
+    private static String registryUrl() {
+        return REGISTRY.getSchemaRegistryAddress();
     }
 
     private static int register(String subject, String schema) throws Exception {
         String body = "{\"schemaType\":\"PROTOBUF\",\"schema\":" + quote(schema) + "}";
         try (HttpClient http = HttpClient.newHttpClient()) {
             HttpResponse<String> response = http.send(HttpRequest
-                    .newBuilder(URI.create(REGISTRY + "/subjects/" + subject + "/versions"))
+                    .newBuilder(URI.create(registryUrl() + "/subjects/" + subject + "/versions"))
                     .header("Content-Type", "application/vnd.schemaregistry.v1+json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build(), HttpResponse.BodyHandlers.ofString());
@@ -126,7 +125,7 @@ class SerdeRegistryLiveIntegrationTest {
         Map<String, Object> config = new HashMap<>();
         config.put(ProtoMoltSerdeConfig.DESCRIPTOR_SET_BASE64, descriptorSetBase64);
         config.put(ProtoMoltSerdeConfig.MESSAGE_TYPE, "serde.it.v1.Order");
-        config.put(ProtoMoltSerdeConfig.REGISTRY_URL, REGISTRY);
+        config.put(ProtoMoltSerdeConfig.REGISTRY_URL, registryUrl());
         config.put(ProtoMoltSerdeConfig.SUBJECT, subject);
         config.put(ProtoMoltSerdeConfig.SCHEMA_ID, 0);
         return config;

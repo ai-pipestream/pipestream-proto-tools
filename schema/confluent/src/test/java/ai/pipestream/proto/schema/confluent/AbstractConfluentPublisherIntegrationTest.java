@@ -29,12 +29,14 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Integration tests for {@link ConfluentSchemaPublisher} against a live Confluent-compatible
- * registry, run once per endpoint via the concrete subclasses (Apicurio ccompat facade and
- * real Confluent Schema Registry), mirroring {@link AbstractConfluentCompatIntegrationTest}.
+ * registry, run once per endpoint via the concrete subclasses, mirroring
+ * {@link AbstractConfluentCompatIntegrationTest}.
  *
- * <p>Start the registries with {@code docker compose -f docker-compose.integration.yml up -d}
- * (repo root). When the registry is not reachable these tests skip via JUnit assumptions, so
- * {@code ./gradlew build} stays green without containers.</p>
+ * <p>{@link ConfluentSchemaRegistryPublisherIntegrationTest} provisions its own registry (a
+ * Testcontainers Redpanda serving the Confluent Schema Registry API) and skips when Docker is
+ * unavailable. {@link ApicurioCcompatPublisherIntegrationTest} needs the compose stack
+ * ({@code docker compose -f docker-compose.integration.yml up -d}, repo root) and skips via a
+ * JUnit assumption when the registry is not reachable.</p>
  *
  * <p>Subjects are registered under unique per-run prefixes so reruns never collide; a
  * best-effort cleanup deletes them afterwards.</p>

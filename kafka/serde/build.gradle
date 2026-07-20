@@ -19,6 +19,8 @@ dependencies {
     testImplementation libs.kafka.clients
     testImplementation project(':protomolt-proto-sources')
     testImplementation libs.slf4j.simple
+    testImplementation libs.testcontainers.redpanda
+    testImplementation libs.testcontainers.junit.jupiter
 }
 
 // Test fixtures only: generated classes to prove the deserializer returns them.
