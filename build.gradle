@@ -78,6 +78,9 @@ ext.commonPomMetadata = { pom ->
 
 subprojects {
     repositories {
+        mavenLocal()
+        // The ai.pipestream fork snapshots (shared-floor Lucene, preview OpenNLP).
+        maven { url = 'https://git.rokkon.com/api/packages/ai-pipestream/maven' }
         mavenCentral()
     }
 
@@ -142,6 +145,21 @@ subprojects {
         }
 
         publishing {
+            repositories {
+                // Snapshots publish to the ai.pipestream dev registry; releases go to
+                // Maven Central via nmcp. Mirrors the platform convention.
+                def forgejoToken = System.getenv('FORGEJO_TOKEN')
+                if (version.toString().endsWith('-SNAPSHOT') && forgejoToken) {
+                    maven {
+                        name = 'Registry'
+                        url = uri('https://git.rokkon.com/api/packages/ai-pipestream/maven')
+                        credentials {
+                            username = System.getenv('FORGEJO_ACTOR') ?: 'ci'
+                            password = forgejoToken
+                        }
+                    }
+                }
+            }
             publications {
                 create('maven', MavenPublication) {
                     if (project.name == 'bom') {
