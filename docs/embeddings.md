@@ -26,6 +26,10 @@ embeddings/
   harness/               protomolt-embeddings-harness
 ```
 
+The companion [rerank SPI](rerank.md) mirrors this provider surface for
+query-document scoring, comparing providers on ranking rather than vector
+agreement.
+
 ## The provider SPI
 
 `EmbeddingProvider` is a `ServiceLoader` contract with three methods: a

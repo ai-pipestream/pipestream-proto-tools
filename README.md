@@ -46,6 +46,10 @@ Maven artifact IDs carry the `protomolt-` prefix; Java packages use the
 | `embeddings/providers/` | `embeddings-tei` | Remote provider for Hugging Face Text Embeddings Inference over gRPC |
 | `embeddings/providers/` | `embeddings-ovms` | Remote provider for OpenVINO Model Server over the KServe v2 gRPC protocol |
 | `embeddings/` | `embeddings-harness` | Pairwise cosine-equivalence certification for two providers serving the same model |
+| `rerank/` | `rerank` | Rerank-provider SPI: score a query's candidate texts so pipelines can re-order search hits |
+| `rerank/providers/` | `rerank-tei` | Remote rerank provider for Hugging Face Text Embeddings Inference over gRPC |
+| `rerank/providers/` | `rerank-ovms` | Remote rerank provider for OpenVINO Model Server over the REST rerank endpoint |
+| `rerank/` | `rerank-harness` | Ranked-list equivalence certification (Kendall tau-b plus top-1 agreement) for two providers serving the same model |
 | `emit/` | `emit`, `emit-okf`, `emit-parquet` | Bundles of rendered files and the sinks that deliver them (directory, git, zip); the OKF v0.1 knowledge-bundle renderer; descriptor-driven Parquet with no generated classes and no native Hadoop |
 | `graph/` | `msgraph` | Microsoft Graph: OneDrive/SharePoint files and list-item metadata, and Copilot connector ingestion over the external connections API |
 | `lake/` | `iceberg`, `iceberg-s3` | Apache Iceberg: descriptor-driven table schemas and an append sink writing ProtoMolt Parquet through any catalog; `S3FileIO` wiring so tables live on any S3-compatible store |
@@ -194,6 +198,8 @@ Each of these is covered in depth in the documentation below.
   the Lucene/OpenSearch/Solr plugins
 - [Text embeddings](docs/embeddings.md) — the `EmbeddingProvider` SPI,
   plan-driven document embedding, and the Model2Vec provider
+- [Reranking](docs/rerank.md) — the `RerankProvider` SPI, the TEI and OVMS
+  providers, and ranked-list equivalence certification
 - [Emitting bundles](docs/emitting.md) — the bundle/sink SPI (directory,
   git, zip), OKF knowledge bundles, and descriptor-driven Parquet
 - [Microsoft Graph](docs/msgraph.md) — OneDrive/SharePoint files and
