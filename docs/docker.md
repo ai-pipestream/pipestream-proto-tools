@@ -114,6 +114,22 @@ ports so it does not collide with a local 8080.
 ./scripts/docker-smoke.sh
 ```
 
+## The image under test
+
+The serve image is also exercised end to end from the test suite.
+`ContainerSmokeIntegrationTest` in `:protomolt-serve` has Testcontainers build
+`serve/Dockerfile` from the same context CI ships — the Dockerfile plus the
+`installDist` output — start it with `--demo`, and wait on the image's own
+`HEALTHCHECK`. It then asserts every published surface answers over the mapped
+ports: `/health` over REST, an MCP initialize over streamable HTTP, a dynamic
+gRPC call driven purely by reflection, and the demo registry's subjects and
+chains. The suite runs with the module's ordinary `test` task (which builds
+the distribution first) and skips when Docker is unavailable:
+
+```shell
+./gradlew :protomolt-serve:test --tests '*ContainerSmokeIntegrationTest'
+```
+
 ## Keeping schemas
 
 `--demo` uses an ephemeral registry that is gone when the container stops. For a registry that
